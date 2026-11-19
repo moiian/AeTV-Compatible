@@ -51,6 +51,8 @@ import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.model.HotTvViewModel;
 import com.fongmi.android.tv.model.HotTvViewModel.Chart;
+import com.fongmi.android.tv.model.HotTvViewModel.Option;
+import com.fongmi.android.tv.model.HotTvViewModel.Section;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
@@ -62,6 +64,8 @@ import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.fragment.FolderFragment;
 import com.fongmi.android.tv.ui.fragment.KeepFragment;
+import com.fongmi.android.tv.ui.fragment.SearchFragment;
+import com.fongmi.android.tv.ui.fragment.SettingFragment;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
 import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
@@ -108,25 +112,26 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private View mHotNav;
     private TextView mVodNav;
     private TextView mMoreNav;
-    private boolean mCategoriesOpen = true;
     private boolean mShowAllCategories;
     private KeepFragment mLibrary;
+    private SearchFragment mSearch;
+    private SettingFragment mSettings;
+    private TextView mSearchNav;
+    private TextView mSettingsNav;
     private View mSelectedNav;
     private FolderFragment mCategory;
     private boolean mCategoryFilter;
     private HomeWebController mWeb;
     private WebView mHomeWeb;
-    private Result mResult;
-    private Result mHomeResult;
     private List<Vod> mHotTv;
     private HotTvViewModel mHotTvModel;
-    private View mSelectedChart;
-    private boolean mLoadingSite;
+    private TextView mSelectedSection;
+    private TextView mSelectedChart;
+    private TextView mSelectedRegion;
     private Clock mClock;
     private String webChromeMode = TV_NORMAL;
     private String webDefaultChromeMode = TV_FULL;
     private boolean webToolbarVisible = true;
-    private boolean loadingHomeCategory;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -156,12 +161,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     protected void initView(Bundle savedInstanceState) {
         SpiderDebug.log("startup", "home initView start cost=%sms", System.currentTimeMillis() - App.time());
-        mResult = Result.empty();
-        mHomeResult = Result.empty();
         mClock = Clock.create(mBinding.clock);
         mBinding.progressLayout.showProgress();
         setRecyclerView();
         setNavigation();
+        restoreUtilityPane();
         setViewModel();
         runAfterFirstFrame(this::initAfterFirstFrame);
         SpiderDebug.log("startup", "home initView end cost=%sms", System.currentTimeMillis() - App.time());
@@ -293,53 +297,74 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.getResult().observe(this, result -> {
-            boolean categoryResult = isHomeCategoryResult(result);
-            mLoadingSite = false;
-            if (!categoryResult) {
-                Cache.clear().put(result);
-                setTypes(mHomeResult = result);
-            }
-            mResult = result;
-            if (mHotTv != null && mHotTv.isEmpty()) {
-                mAdapter.remove("progress");
-                addVideo(result);
-            }
+            Cache.clear().put(result);
+            setTypes(result);
         });
         mHotTvModel = new ViewModelProvider(this).get(HotTvViewModel.class);
-        setChartTabs();
-        mHotTvModel.getItems().observe(this, this::onHotTv);
-        mHotTvModel.load(mHotTvModel.getChart());
-    }
-
-    private void setChartTabs() {
-        for (Chart chart : Chart.values()) {
-            TextView tab = (TextView) getLayoutInflater().inflate(R.layout.item_aetv_chart, mBinding.chartTabs, false);
-            tab.setText(chart.label);
-            tab.setOnClickListener(view -> {
-                activateChart(view);
-                mHotTvModel.load(chart);
-            });
-            mBinding.chartTabs.addView(tab);
-            if (mHotTvModel.getChart() == chart) activateChart(tab);
+        for (Section section : Section.values()) {
+            addChartTab(mBinding.mainChartTabs, section.label, view -> showChart(section.firstChart(), false));
         }
+        mHotTvModel.getItems().observe(this, this::onHotTv);
+        showChart(mHotTvModel.getChart(), false);
     }
 
-    private void activateChart(View tab) {
-        if (mSelectedChart != null) mSelectedChart.setActivated(false);
-        mSelectedChart = tab;
+    private TextView addChartTab(LinearLayout row, int label, View.OnClickListener onClick) {
+        TextView tab = (TextView) getLayoutInflater().inflate(R.layout.item_aetv_chart, row, false);
+        tab.setText(label);
+        tab.setOnClickListener(onClick);
+        row.addView(tab);
+        return tab;
+    }
+
+    private TextView selectTab(TextView tab, TextView previous) {
+        if (previous != null) {
+            previous.setActivated(false);
+            previous.setTextColor(getColor(R.color.white));
+        }
         tab.setActivated(true);
+        tab.setTextColor(getColor(R.color.aetv_red));
+        return tab;
+    }
+
+    private void showChart(Chart chart, boolean refresh) {
+        Section section = chart.section();
+        TextView sectionTab = (TextView) mBinding.mainChartTabs.getChildAt(section.ordinal());
+        if (mSelectedSection != sectionTab) {
+            mSelectedSection = selectTab(sectionTab, mSelectedSection);
+            mBinding.chartTabs.removeAllViews();
+            for (Option option : section.options) {
+                addChartTab(mBinding.chartTabs, option.label, view ->
+                        showChart(new Chart(section, option, mHotTvModel.getChart().region()), false));
+            }
+            mBinding.regionChartTabs.removeAllViews();
+            ((View) mBinding.regionChartTabs.getParent()).setVisibility(section == Section.MOVIE ? View.VISIBLE : View.GONE);
+            if (section == Section.MOVIE) {
+                for (Option region : Option.MOVIE_REGIONS) {
+                    addChartTab(mBinding.regionChartTabs, region.label, view ->
+                            showChart(new Chart(section, mHotTvModel.getChart().option(), region), false));
+                }
+            }
+            mSelectedChart = null;
+            mSelectedRegion = null;
+        }
+        TextView tab = (TextView) mBinding.chartTabs.getChildAt(section.options.indexOf(chart.option()));
+        mSelectedChart = selectTab(tab, mSelectedChart);
+        if (section == Section.MOVIE) {
+            TextView regionTab = (TextView) mBinding.regionChartTabs.getChildAt(Option.MOVIE_REGIONS.indexOf(chart.region()));
+            mSelectedRegion = selectTab(regionTab, mSelectedRegion);
+        }
+        mHotTvModel.load(chart, refresh);
     }
 
     private void onHotTv(List<Vod> items) {
         mHotTv = items;
         clearRecommendRows();
-        if (items == null || items.isEmpty() && mLoadingSite) mAdapter.add("progress");
-        else if (items.isEmpty()) addVideo(mResult);
-        else addGrid(items, Style.rect());
-    }
-
-    private boolean isHomeCategoryResult(Result result) {
-        return loadingHomeCategory && result.getTypes().isEmpty();
+        mBinding.chartMessage.setVisibility(items != null && items.isEmpty() ? View.VISIBLE : View.GONE);
+        if (items == null) mAdapter.add("progress");
+        else if (!items.isEmpty()) {
+            addGrid(items, Style.rect());
+            mBinding.recycler.scrollToPosition(0);
+        }
     }
 
     private void setTitle() {
@@ -423,19 +448,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (mWeb != null) mWeb.hide();
         hideWebOverlay();
         applyTvChrome(TV_NORMAL);
-        if (mLibrary == null) showHot();
+        if (mLibrary == null && mSettings == null && mSearch == null) showHot();
         mBinding.categoryNavigation.removeAllViews();
         mShowAllCategories = false;
         updateCategoryNavigation();
         mBinding.recycler.setVisibility(View.VISIBLE);
-        mResult = Result.empty();
-        mHomeResult = Result.empty();
-        loadingHomeCategory = false;
-        mLoadingSite = true;
-        if (mHotTv != null && mHotTv.isEmpty()) {
-            clearRecommendRows();
-            mAdapter.add("progress");
-        }
         mViewModel.homeContent();
     }
 
@@ -453,11 +470,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         LinearLayout categories = mBinding.categoryNavigation;
         menu.removeView(categories);
 
-        mHotNav = addNav(menu, getString(R.string.home_popular), R.drawable.ic_aetv_house, view -> showHot());
+        mHotNav = addNav(menu, getString(R.string.home_popular), R.drawable.ic_aetv_house, view -> {
+            showHot();
+            showChart(Section.SERIES.firstChart(), true);
+        });
         addNav(menu, getString(R.string.home_keep), R.drawable.ic_home_keep, this::showLibrary);
         addNavDivider(menu);
         mVodNav = addNav(menu, getString(R.string.home_vod), R.drawable.ic_home_vod, view -> {
-            mCategoriesOpen = !mCategoriesOpen;
+            mShowAllCategories = false;
             updateCategoryNavigation();
         });
         setNavIcons(mVodNav, R.drawable.ic_home_vod, R.drawable.ic_aetv_chevron_right);
@@ -465,17 +485,18 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mMoreNav = addNav(menu, getString(R.string.home_expand_categories), R.drawable.ic_aetv_chevron_down, view -> {
             mShowAllCategories = !mShowAllCategories;
             updateCategoryNavigation();
+            mVodNav.requestFocus();
         });
         mMoreNav.setTextSize(15);
         addNavDivider(menu);
 
-        TextView search = addNav(menu, getString(R.string.home_search), R.drawable.ic_home_search, view -> SearchActivity.start(this));
-        search.setOnLongClickListener(view -> {
-            SearchActivity.start(this, "", getHome().getKey());
+        mSearchNav = addNav(menu, getString(R.string.home_search), R.drawable.ic_home_search, view -> showSearch(null));
+        mSearchNav.setOnLongClickListener(view -> {
+            showSearch(getHome().getKey());
             return true;
         });
         addNav(menu, getString(R.string.home_live), R.drawable.ic_home_live, view -> LiveActivity.start(this));
-        addNav(menu, getString(R.string.home_setting), R.drawable.ic_home_setting, view -> SettingActivity.start(this));
+        mSettingsNav = addNav(menu, getString(R.string.home_setting), R.drawable.ic_home_setting, view -> openSetting());
 
         updateCategoryNavigation();
         selectNavigation(mHotNav);
@@ -511,7 +532,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void addNavDivider(LinearLayout menu) {
         View line = new View(this);
-        line.setBackgroundColor(0x385E7691);
+        line.setBackgroundColor(getColor(R.color.aetv_divider));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ResUtil.dp2px(1));
         params.setMargins(ResUtil.dp2px(12), ResUtil.dp2px(7), ResUtil.dp2px(12), ResUtil.dp2px(7));
         menu.addView(line, params);
@@ -520,11 +541,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void updateCategoryNavigation() {
         LinearLayout categories = mBinding.categoryNavigation;
         int count = categories.getChildCount();
-        categories.setVisibility(mCategoriesOpen ? View.VISIBLE : View.GONE);
         for (int i = 0; i < count; i++) {
             categories.getChildAt(i).setVisibility(mShowAllCategories || i < DEFAULT_CATEGORY_COUNT ? View.VISIBLE : View.GONE);
         }
-        mMoreNav.setVisibility(mCategoriesOpen && count > DEFAULT_CATEGORY_COUNT ? View.VISIBLE : View.GONE);
+        mMoreNav.setVisibility(count > DEFAULT_CATEGORY_COUNT ? View.VISIBLE : View.GONE);
         mMoreNav.setText(mShowAllCategories ? R.string.home_retract_categories : R.string.home_expand_categories);
         setNavIcons(mMoreNav, mShowAllCategories ? R.drawable.ic_aetv_chevron_up : R.drawable.ic_aetv_chevron_down, 0);
     }
@@ -549,7 +569,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void showCategory(Class type, View nav) {
         if (getSupportFragmentManager().isStateSaved()) return;
         if (mCategory != null && mSelectedNav == nav) return;
-        mLibrary = null;
+        clearPaneReferences();
         mCategory = FolderFragment.newInstance(getHome().getKey(), type);
         mCategoryFilter = false;
         showPane(mCategory, nav);
@@ -557,44 +577,58 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void showLibrary(View nav) {
         if (mLibrary != null || getSupportFragmentManager().isStateSaved()) return;
-        mCategory = null;
-        mCategoryFilter = false;
+        clearPaneReferences();
         mLibrary = new KeepFragment();
         showPane(mLibrary, nav);
     }
 
-    private void showPane(Fragment pane, View nav) {
+    private void showSearch(String siteKey) {
+        if (getSupportFragmentManager().isStateSaved()) return;
+        clearPaneReferences();
+        Bundle options = new Bundle();
+        options.putBoolean("embedded", true);
+        options.putString("siteKey", siteKey);
+        mSearch = SearchFragment.newInstance(options);
+        showPane(mSearch, mSearchNav);
+    }
+
+    private void clearPaneReferences() {
+        mLibrary = null;
+        mSearch = null;
+        mSettings = null;
+        mCategory = null;
+        mCategoryFilter = false;
+    }
+
+    private void restoreUtilityPane() {
+        Fragment previous = getSupportFragmentManager().findFragmentById(R.id.homeCategory);
+        if (previous instanceof SearchFragment search) {
+            mSearch = search;
+            selectPane(mSearchNav);
+        } else if (previous instanceof SettingFragment settings) {
+            mSettings = settings;
+            selectPane(mSettingsNav);
+        }
+    }
+
+    private void selectPane(View nav) {
         selectNavigation(nav);
         mBinding.homeCategory.setVisibility(View.VISIBLE);
         mBinding.homePopular.setVisibility(View.GONE);
+    }
+
+    private void showPane(Fragment pane, View nav) {
+        selectPane(nav);
         getSupportFragmentManager().beginTransaction().replace(R.id.homeCategory, pane).commitNow();
     }
 
     private void showHot() {
         Fragment prior = getSupportFragmentManager().findFragmentById(R.id.homeCategory);
-        // A site change can arrive while Settings is in front. The category pane is transient.
         if (prior != null) getSupportFragmentManager().beginTransaction().remove(prior).commitNowAllowingStateLoss();
-        mLibrary = null;
-        mCategory = null;
-        mCategoryFilter = false;
+        clearPaneReferences();
         selectNavigation(mHotNav);
         mBinding.homeCategory.setVisibility(View.GONE);
         mBinding.homePopular.setVisibility(View.VISIBLE);
-    }
-
-    private void addVideo(Result result) {
-        if (!loadingHomeCategory && result.getList().isEmpty() && !result.getTypes().isEmpty()) {
-            Class type = result.getTypes().get(0);
-            SpiderDebug.log("home", "home list empty, auto open first category key=%s tid=%s", getHome().getKey(), type.getTypeId());
-            loadingHomeCategory = true;
-            mAdapter.add("progress");
-            mViewModel.categoryContent(getHome().getKey(), type.getTypeId(), "1", true, new java.util.HashMap<>());
-            return;
-        }
-        loadingHomeCategory = false;
-        Style style = result.getStyle(getHome().getStyle());
-        if (style.isList()) mAdapter.addAll(mAdapter.size(), result.getList());
-        else addGrid(result.getList(), style);
     }
 
     private void clearRecommendRows() {
@@ -647,8 +681,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 if (mHotTv != null && !mHotTv.isEmpty()) {
                     clearRecommendRows();
                     addGrid(mHotTv, Style.rect());
-                } else {
-                    getVideo();
                 }
                 break;
         }
@@ -691,10 +723,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onItemClick(Vod item) {
-        if (mHotTv != null && !mHotTv.isEmpty()) CollectActivity.start(this, item.getName());
-        else if (item.isAction()) mViewModel.action(getHome().getKey(), item.getAction());
-        else if (getHome().isIndex()) CollectActivity.start(this, item.getName());
-        else VideoActivity.start(this, getHome().getKey(), item.getId(), item.getName(), item.getPic());
+        CollectActivity.start(this, item.getName());
     }
 
     @Override
@@ -748,9 +777,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (KeyUtil.isMenuKey(event)) {
+            if (!KeyUtil.isActionDown(event) || event.getRepeatCount() > 0) return true;
             if (mWeb != null && mWeb.isVisible()) showDialog();
             else if (mCategory != null) toggleCategoryFilter();
-            else SettingActivity.start(this);
+            else if (mSearch != null) mSearch.showDialog();
+            else {
+                openSetting();
+                mSettingsNav.requestFocus();
+            }
             return true;
         }
         if (mWeb != null && mWeb.isVisible()) {
@@ -771,23 +805,36 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 requestContentFocus();
                 return true;
             }
-            if (mBinding.homePopular.isShown() && mSelectedChart != null) {
-                if (KeyUtil.isUpKey(event) && mBinding.recycler.hasFocus() && mBinding.recycler.getSelectedPosition() <= 0) {
-                    return mSelectedChart.requestFocus();
-                }
-                if (KeyUtil.isDownKey(event) && mBinding.chartTabs.hasFocus()) {
-                    requestVideoFocus();
-                    return true;
-                }
-            }
+            if (mBinding.homePopular.isShown() && moveChartFocus(event)) return true;
             View focused = getCurrentFocus();
-            if (KeyUtil.isLeftKey(event) && inContent(focused) && atContentLeftEdge(focused)) {
+            if (KeyUtil.isLeftKey(event) && inContent(focused) && (mSearch == null || mSearch.canExitLeft(focused)) && atContentLeftEdge(focused)) {
                 View target = mSelectedNav.isShown() ? mSelectedNav : mVodNav;
                 target.requestFocus();
                 return true;
             }
         }
+        if (mSearch != null && inContent(getCurrentFocus()) && mSearch.handleKey(event)) return true;
         return super.dispatchKeyEvent(event);
+    }
+
+    private boolean moveChartFocus(KeyEvent event) {
+        boolean movie = mSelectedRegion != null;
+        if (KeyUtil.isUpKey(event)) {
+            if (mBinding.recycler.hasFocus() && mBinding.recycler.getSelectedPosition() <= 0) {
+                return (movie ? mSelectedRegion : mSelectedChart).requestFocus();
+            }
+            if (mBinding.chartTabs.hasFocus()) return mSelectedSection.requestFocus();
+            if (mBinding.regionChartTabs.hasFocus()) return mSelectedChart.requestFocus();
+        }
+        if (KeyUtil.isDownKey(event)) {
+            if (mBinding.mainChartTabs.hasFocus()) return mSelectedChart.requestFocus();
+            if (mBinding.chartTabs.hasFocus() && movie) return mSelectedRegion.requestFocus();
+            if (mBinding.chartTabs.hasFocus() || mBinding.regionChartTabs.hasFocus()) {
+                requestVideoFocus();
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean requestTitleFocus() {
@@ -823,10 +870,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private boolean requestContentFocus() {
+        if (mSettings != null) return mSettings.requestContentFocus();
+        if (mSearch != null) return mSearch.requestContentFocus();
         if (mLibrary != null) return mLibrary.requestContentFocus();
         if (mCategory != null) return mCategory.requestContentFocus();
         if (requestVideoFocus()) return true;
-        return mSelectedChart != null && mSelectedChart.requestFocus();
+        return mSelectedSection != null && mSelectedSection.requestFocus();
     }
 
     private boolean requestVideoFocus() {
@@ -851,7 +900,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mBinding.recycler.setSelectedPosition(position, new ViewHolderTask() {
             @Override
             public void run(RecyclerView.ViewHolder holder) {
-                if (mSelectedNav == mHotNav && (mBinding.homeNavigation.hasFocus() || mBinding.chartTabs.hasFocus())) focusVideoHolder(holder);
+                if (mSelectedNav == mHotNav && (mBinding.homeNavigation.hasFocus() || mBinding.homeChartBars.hasFocus())) focusVideoHolder(holder);
             }
         });
         return true;
@@ -893,6 +942,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             return;
         } else if (mBinding.progressLayout.isProgress()) {
             showContent();
+        } else if (mSearch != null || mSettings != null) {
+            showHot();
+            mHotNav.requestFocus();
         } else if (mLibrary != null) {
             if (!mLibrary.closeDeleteMode()) {
                 showHot();
@@ -1016,7 +1068,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void openSetting() {
-        SettingActivity.start(this);
+        if (mWeb != null && mWeb.isVisible()) {
+            SettingActivity.start(this);
+            return;
+        }
+        if (mSettings != null || getSupportFragmentManager().isStateSaved()) return;
+        clearPaneReferences();
+        mSettings = new SettingFragment();
+        showPane(mSettings, mSettingsNav);
     }
 
     private void applyTvChrome(String mode) {

@@ -194,7 +194,7 @@ public class ConfigDialog extends BaseAlertDialog {
             binding.text.requestFocus();
             return;
         }
-        ((ConfigListener) requireActivity()).setConfig(config);
+        getConfigListener().setConfig(config);
         dismiss();
     }
 
@@ -236,6 +236,11 @@ public class ConfigDialog extends BaseAlertDialog {
         EventBus.getDefault().unregister(this);
     }
 
+    private ConfigListener getConfigListener() {
+        if (getParentFragment() instanceof ConfigListener listener) return listener;
+        return (ConfigListener) requireActivity();
+    }
+
     private final ActivityResultLauncher<Intent> launcher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
         if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) return;
         FragmentActivity activity = requireActivity();
@@ -243,8 +248,11 @@ public class ConfigDialog extends BaseAlertDialog {
         if (TextUtils.isEmpty(path)) return;
         App.post(() -> {
             if (activity.isFinishing() || activity.isDestroyed()) return;
+            if (!isAdded()) return;
+            ConfigListener listener = getConfigListener();
+            String name = binding.name.getText().toString().trim();
             dismissAllowingStateLoss();
-            App.post(() -> ((ConfigListener) activity).setConfig(saveConfig("file:/" + path.replace(Path.rootPath(), ""), binding.name.getText().toString().trim())), 100);
+            App.post(() -> listener.setConfig(saveConfig("file:/" + path.replace(Path.rootPath(), ""), name)), 100);
         }, 100);
     });
 }

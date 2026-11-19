@@ -67,9 +67,13 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     }
 
     public void show(FragmentActivity activity) {
+        show(activity, activity instanceof SiteListener siteListener ? siteListener : null);
+    }
+
+    public void show(FragmentActivity activity, SiteListener listener) {
         showStart = System.currentTimeMillis();
         this.activity = activity;
-        if (activity instanceof SiteListener) listener = (SiteListener) activity;
+        this.listener = listener;
         if (activity.isFinishing() || activity.isDestroyed()) return;
         log("click received action=%s type=%s", action, type);
         showDirect(activity);

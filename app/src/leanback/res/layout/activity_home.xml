@@ -15,7 +15,7 @@
             android:id="@+id/homeNavigation"
             android:layout_width="@dimen/home_nav_width"
             android:layout_height="match_parent"
-            android:background="#ED142032"
+            android:background="@color/aetv_sidebar"
             android:fillViewport="true"
             android:focusable="false"
             android:scrollbars="none">
@@ -27,6 +27,17 @@
                 android:orientation="vertical"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="12dp">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginEnd="9dp"
+                    android:layout_marginBottom="8dp"
+                    android:contentDescription="@string/home_brand"
+                    android:importantForAccessibility="yes"
+                    android:scaleType="fitStart"
+                    android:src="@drawable/aetv_family_logo" />
 
                 <LinearLayout
                     android:id="@+id/categoryNavigation"
@@ -50,24 +61,76 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical">
 
-                <HorizontalScrollView
+                <LinearLayout
+                    android:id="@+id/homeChartBars"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:clipToPadding="false"
-                    android:focusable="false"
-                    android:paddingStart="24dp"
-                    android:paddingTop="14dp"
-                    android:paddingEnd="24dp"
-                    android:paddingBottom="4dp"
-                    android:scrollbars="none">
+                    android:orientation="vertical"
+                    android:paddingTop="10dp">
 
-                    <LinearLayout
-                        android:id="@+id/chartTabs"
-                        android:layout_width="wrap_content"
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal" />
+                        android:clipToPadding="false"
+                        android:focusable="false"
+                        android:paddingStart="24dp"
+                        android:paddingEnd="24dp"
+                        android:scrollbars="none">
 
-                </HorizontalScrollView>
+                        <LinearLayout
+                            android:id="@+id/mainChartTabs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+
+                    </HorizontalScrollView>
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipToPadding="false"
+                        android:focusable="false"
+                        android:paddingStart="24dp"
+                        android:paddingEnd="24dp"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/chartTabs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+
+                    </HorizontalScrollView>
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipToPadding="false"
+                        android:focusable="false"
+                        android:paddingStart="24dp"
+                        android:paddingEnd="24dp"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/regionChartTabs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+
+                    </HorizontalScrollView>
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/chartMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="24dp"
+                    android:paddingVertical="16dp"
+                    android:text="@string/home_chart_unavailable"
+                    android:textColor="@color/aetv_text_muted"
+                    android:textSize="16sp"
+                    android:visibility="gone" />
 
                 <com.fongmi.android.tv.ui.custom.ProgressLayout
                     android:id="@+id/progressLayout"

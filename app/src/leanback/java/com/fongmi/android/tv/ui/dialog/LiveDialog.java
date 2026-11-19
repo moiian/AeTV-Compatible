@@ -68,7 +68,8 @@ public class LiveDialog extends BaseAlertDialog implements LiveAdapter.OnClickLi
 
     @Override
     public void onItemClick(Live item) {
-        ((LiveListener) requireActivity()).setLive(item);
+        LiveListener listener = getParentFragment() instanceof LiveListener parent ? parent : (LiveListener) requireActivity();
+        listener.setLive(item);
         dismiss();
     }
 

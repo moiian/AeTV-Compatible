@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.model;
 
+import android.net.Uri;
+
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -17,7 +19,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -28,28 +30,75 @@ import okhttp3.ResponseBody;
 
 public class HotTvViewModel extends ViewModel {
 
-    private static final String URL = "https://m.douban.com/rexxar/api/v2/subject/recent_hot/tv?start=0&limit=20&category=tv&type=";
+    private static final String URL = "https://m.douban.com/rexxar/api/v2/subject/recent_hot";
     private static final long TIMEOUT_MS = 8_000;
 
-    public enum Chart {
+    public enum Section {
+        SERIES(R.string.home_chart_series, Option.DOMESTIC, Option.WESTERN, Option.JAPANESE, Option.KOREAN, Option.DOCUMENTARY),
+        MOVIE(R.string.home_chart_movie, Option.HOT, Option.LATEST, Option.HIGH_SCORE, Option.HIDDEN_GEMS),
+        VARIETY(R.string.home_chart_variety, Option.SHOW_DOMESTIC, Option.SHOW_FOREIGN);
+
+        public final int label;
+        public final List<Option> options;
+
+        Section(int label, Option... options) {
+            this.label = label;
+            this.options = List.of(options);
+        }
+
+        public Chart firstChart() {
+            return new Chart(this, options.get(0), Option.CHINESE);
+        }
+    }
+
+    public enum Option {
         DOMESTIC(R.string.home_chart_domestic, "tv_domestic"),
         WESTERN(R.string.home_chart_western, "tv_american"),
         JAPANESE(R.string.home_chart_japanese, "tv_japanese"),
         KOREAN(R.string.home_chart_korean, "tv_korean"),
-        DOCUMENTARY(R.string.home_chart_documentary, "tv_documentary");
+        DOCUMENTARY(R.string.home_chart_documentary, "tv_documentary"),
+        SHOW_DOMESTIC(R.string.home_chart_show_domestic, "show_domestic"),
+        SHOW_FOREIGN(R.string.home_chart_show_foreign, "show_foreign"),
+        HOT(R.string.home_chart_movie_hot, "热门"),
+        LATEST(R.string.home_chart_movie_latest, "最新"),
+        HIGH_SCORE(R.string.home_chart_movie_high_score, "豆瓣高分"),
+        HIDDEN_GEMS(R.string.home_chart_movie_hidden_gems, "冷门佳片"),
+        CHINESE(R.string.home_chart_region_chinese, "华语"),
+        EUROPE_AMERICA(R.string.home_chart_region_western, "欧美"),
+        SOUTH_KOREA(R.string.home_chart_region_korea, "韩国"),
+        JAPAN(R.string.home_chart_region_japan, "日本");
+
+        public static final List<Option> MOVIE_REGIONS = List.of(CHINESE, EUROPE_AMERICA, SOUTH_KOREA, JAPAN);
 
         public final int label;
-        final String type;
+        final String parameter;
 
-        Chart(int label, String type) {
+        Option(int label, String parameter) {
             this.label = label;
-            this.type = type;
+            this.parameter = parameter;
+        }
+    }
+
+    public record Chart(Section section, Option option, Option region) {
+        String url() {
+            String category = switch (section) {
+                case SERIES -> "tv";
+                case VARIETY -> "show";
+                case MOVIE -> option.parameter;
+            };
+            return Uri.parse(URL).buildUpon()
+                    .appendPath(section == Section.MOVIE ? "movie" : "tv")
+                    .appendQueryParameter("start", "0")
+                    .appendQueryParameter("limit", "20")
+                    .appendQueryParameter("category", category)
+                    .appendQueryParameter("type", section == Section.MOVIE ? region.parameter : option.parameter)
+                    .build().toString();
         }
     }
 
     private final MutableLiveData<List<Vod>> items = new MutableLiveData<>();
-    private final Map<Chart, List<Vod>> cache = new EnumMap<>(Chart.class);
-    private Chart chart = Chart.DOMESTIC;
+    private final Map<Chart, List<Vod>> cache = new HashMap<>();
+    private Chart chart = Section.SERIES.firstChart();
     private Call call;
 
     public LiveData<List<Vod>> getItems() {
@@ -60,12 +109,13 @@ public class HotTvViewModel extends ViewModel {
         return chart;
     }
 
-    public void load(Chart next) {
-        if (chart == next && call != null) return;
+    public void load(Chart next, boolean refresh) {
+        if (!refresh && chart.equals(next) && call != null) return;
         if (call != null) call.cancel();
         call = null;
         chart = next;
 
+        if (refresh) cache.remove(next);
         List<Vod> cached = cache.get(next);
         if (cached != null) {
             items.setValue(cached);
@@ -73,7 +123,8 @@ public class HotTvViewModel extends ViewModel {
         }
 
         items.setValue(null);
-        call = OkHttp.newCall(URL + next.type, Map.of("Referer", "https://movie.douban.com/tv/"));
+        call = OkHttp.newCall(next.url(), Map.of("Referer", next.section() == Section.MOVIE
+                ? "https://movie.douban.com/explore" : "https://movie.douban.com/tv/"));
         call.timeout().timeout(TIMEOUT_MS, TimeUnit.MILLISECONDS);
         call.enqueue(new Callback() {
             @Override

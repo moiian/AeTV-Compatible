@@ -16,6 +16,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatImageView;
 import androidx.fragment.app.FragmentActivity;
+import androidx.lifecycle.LifecycleOwner;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.KeyUtil;
@@ -56,17 +57,17 @@ public class CustomMic extends AppCompatImageView {
         return intent;
     }
 
-    public void setListener(FragmentActivity activity, CustomTextListener listener) {
+    public void setListener(FragmentActivity activity, LifecycleOwner owner, CustomTextListener listener) {
         mActivity = activity;
         mListener = listener;
         mListener.setDone(() -> updateUI(false));
         mAvailable = SpeechRecognizer.isRecognitionAvailable(activity);
-        initSpeech();
+        initSpeech(owner);
     }
 
-    private void initSpeech() {
+    private void initSpeech(LifecycleOwner owner) {
         if (isAvailable()) initRecognizer();
-        else if (hasResolveActivity()) initLauncher();
+        else if (hasResolveActivity()) initLauncher(owner);
         else setVisibility(GONE);
     }
 
@@ -79,8 +80,8 @@ public class CustomMic extends AppCompatImageView {
         mRecognizer.setRecognitionListener(mListener);
     }
 
-    private void initLauncher() {
-        mLauncher = mActivity.registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+    private void initLauncher(LifecycleOwner owner) {
+        mLauncher = mActivity.getActivityResultRegistry().register("search-speech", owner, new ActivityResultContracts.StartActivityForResult(), result -> {
             if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) return;
             List<String> texts = result.getData().getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (texts != null && !texts.isEmpty()) mListener.onResults(texts.get(0));
