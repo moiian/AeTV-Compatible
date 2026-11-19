@@ -2,9 +2,9 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="@color/black_30" />
+    <solid android:color="@color/aetv_panel" />
 
-    <corners android:radius="4dp" />
+    <corners android:radius="9dp" />
 
     <padding
         android:bottom="8dp"

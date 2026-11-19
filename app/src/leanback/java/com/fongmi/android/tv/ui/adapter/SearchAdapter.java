@@ -116,7 +116,7 @@ public class SearchAdapter extends RecyclerView.Adapter<SearchAdapter.ViewHolder
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         ViewHolder holder = new ViewHolder(AdapterSearchBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
         holder.binding.getRoot().getLayoutParams().width = width;
-        holder.binding.getRoot().getLayoutParams().height = height + ResUtil.dp2px(34);
+        holder.binding.getRoot().getLayoutParams().height = height + ResUtil.dp2px(48);
         holder.binding.image.getLayoutParams().height = height;
         return holder;
     }
@@ -125,10 +125,10 @@ public class SearchAdapter extends RecyclerView.Adapter<SearchAdapter.ViewHolder
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Vod item = items.get(position);
         holder.bindName(item.getName());
-        holder.binding.site.setText(item.getSiteName());
-        holder.binding.remark.setText(item.getRemarks());
-        holder.binding.site.setVisibility(item.getSiteVisible());
-        holder.binding.remark.setVisibility(item.getRemarkVisible());
+        List<String> metadata = new ArrayList<>(2);
+        if (!item.getSiteName().isEmpty()) metadata.add(item.getSiteName());
+        if (!item.getRemarks().isEmpty()) metadata.add(item.getRemarks());
+        holder.binding.metadata.setText(TextUtils.join(" · ", metadata));
         holder.binding.getRoot().setOnClickListener(v -> listener.onItemClick(item));
         holder.binding.getRoot().setOnKeyListener((v, keyCode, event) -> listener.onItemKey(holder.getBindingAdapterPosition(), keyCode, event));
         ImgUtil.load(item.getName(), item.getPic(), holder.binding.image, width, height);

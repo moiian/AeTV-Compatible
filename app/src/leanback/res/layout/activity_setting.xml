@@ -103,13 +103,11 @@
                 android:id="@+id/homeSiteAction"
                 style="@style/AeTVSettingsAction"
                 android:layout_marginEnd="8dp"
-                android:drawableStart="@drawable/ic_home_vod"
                 android:text="@string/home_site" />
 
             <TextView
                 android:id="@+id/homePushAction"
                 style="@style/AeTVSettingsAction"
-                android:drawableStart="@drawable/ic_home_push"
                 android:text="@string/home_push" />
 
         </LinearLayout>
@@ -140,43 +138,6 @@
                 android:id="@+id/enhance"
                 style="@style/AeTVSettingsAction"
                 android:text="@string/setting_enhance" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:id="@+id/wall"
-                style="@style/AeTVSettingsRow"
-                android:layout_marginEnd="8dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    style="@style/AeTVSettingsLabel"
-                    android:text="@string/setting_wall" />
-
-                <TextView
-                    android:id="@+id/wallUrl"
-                    style="@style/AeTVSettingsValue" />
-
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/wallDefault"
-                style="@style/AeTVSettingsTool"
-                android:layout_marginEnd="8dp"
-                android:drawableStart="@drawable/ic_setting_home"
-                android:text="@string/setting_default_wall" />
-
-            <TextView
-                android:id="@+id/wallRefresh"
-                style="@style/AeTVSettingsTool"
-                android:drawableStart="@drawable/ic_setting_refresh"
-                android:text="@string/setting_refresh_wall" />
 
         </LinearLayout>
 

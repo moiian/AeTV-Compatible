@@ -1,9 +1,9 @@
 package com.fongmi.android.tv.ui.activity;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.SearchManager;
 import android.content.Intent;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.KeyEvent;
@@ -34,7 +34,6 @@ import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
-import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Cache;
 import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Config;
@@ -67,6 +66,8 @@ import com.fongmi.android.tv.ui.fragment.KeepFragment;
 import com.fongmi.android.tv.ui.fragment.SearchFragment;
 import com.fongmi.android.tv.ui.fragment.SettingFragment;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
+import com.fongmi.android.tv.ui.custom.FamilyNavigation;
+import com.fongmi.android.tv.ui.custom.FamilyNavigation.Destination;
 import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
@@ -107,18 +108,15 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private ActivityHomeBinding mBinding;
     private ArrayObjectAdapter mAdapter;
     private SiteViewModel mViewModel;
-    private static final int DEFAULT_CATEGORY_COUNT = 5;
+    private static final String ACTION_FAMILY_NAV = "com.moiian.aetv.FAMILY_NAV";
+    private static final String EXTRA_DESTINATION = "destination";
+    private static final String EXTRA_CATEGORY = "category";
 
-    private View mHotNav;
-    private TextView mVodNav;
-    private TextView mMoreNav;
-    private boolean mShowAllCategories;
+    private FamilyNavigation mNavigation;
+    private String mPendingCategory;
     private KeepFragment mLibrary;
     private SearchFragment mSearch;
     private SettingFragment mSettings;
-    private TextView mSearchNav;
-    private TextView mSettingsNav;
-    private View mSelectedNav;
     private FolderFragment mCategory;
     private boolean mCategoryFilter;
     private HomeWebController mWeb;
@@ -164,7 +162,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mClock = Clock.create(mBinding.clock);
         mBinding.progressLayout.showProgress();
         setRecyclerView();
-        setNavigation();
+        mNavigation = new FamilyNavigation(mBinding.homeNavigation, this::navigate);
+        mNavigation.select(mNavigation.home());
+        mNavigation.focusSelected();
         restoreUtilityPane();
         setViewModel();
         runAfterFirstFrame(this::initAfterFirstFrame);
@@ -245,7 +245,16 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void checkAction(Intent intent) {
-        if (Intent.ACTION_SEND.equals(intent.getAction())) {
+        if (ACTION_FAMILY_NAV.equals(intent.getAction())) {
+            String requested = intent.getStringExtra(EXTRA_DESTINATION);
+            for (Destination destination : Destination.values()) {
+                if (!destination.name().equals(requested)) continue;
+                if (destination == Destination.CATEGORY) openCategory(intent.getStringExtra(EXTRA_CATEGORY));
+                else navigate(destination, null);
+                break;
+            }
+            intent.setAction(null);
+        } else if (Intent.ACTION_SEND.equals(intent.getAction())) {
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             PermissionUtil.requestFile(this, allGranted -> checkType(intent));
@@ -297,7 +306,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.getResult().observe(this, result -> {
-            Cache.clear().put(result);
+            Cache.clear().put(result, getHome().getKey());
             setTypes(result);
         });
         mHotTvModel = new ViewModelProvider(this).get(HotTvViewModel.class);
@@ -377,7 +386,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         SpiderDebug.log("startup", "config load start cost=%sms", System.currentTimeMillis() - App.time());
         VodConfig.get().init().load(getCallback());
         LiveConfig.get().init().load();
-        WallConfig.get().init();
     }
 
     private Callback getCallback() {
@@ -400,10 +408,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void showContent() {
         SpiderDebug.log("startup", "home showContent start cost=%sms", System.currentTimeMillis() - App.time());
         mBinding.progressLayout.showContent();
-        checkAction(getIntent());
+        boolean familyNavigation = ACTION_FAMILY_NAV.equals(getIntent().getAction());
+        if (!familyNavigation) checkAction(getIntent());
         setTitle();
         setLogo();
         getVideo();
+        if (familyNavigation) checkAction(getIntent());
         setFocus();
         App.post(this::prewarmWebView, 1500);
         SpiderDebug.log("startup", "home showContent end cost=%sms", System.currentTimeMillis() - App.time());
@@ -428,7 +438,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setFocus() {
-        if (!mBinding.homeNavigation.hasFocus() && !requestContentFocus()) mHotNav.requestFocus();
+        if (!mNavigation.hasFocus() && !requestContentFocus()) mNavigation.home().requestFocus();
     }
 
     private void getVideo() {
@@ -449,9 +459,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         hideWebOverlay();
         applyTvChrome(TV_NORMAL);
         if (mLibrary == null && mSettings == null && mSearch == null) showHot();
-        mBinding.categoryNavigation.removeAllViews();
-        mShowAllCategories = false;
-        updateCategoryNavigation();
+        mNavigation.setTypes(List.of(), this::showCategory);
         mBinding.recycler.setVisibility(View.VISIBLE);
         mViewModel.homeContent();
     }
@@ -465,110 +473,73 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mBinding.webOverlay.setVisibility(View.GONE);
     }
 
-    private void setNavigation() {
-        LinearLayout menu = mBinding.navigationItems;
-        LinearLayout categories = mBinding.categoryNavigation;
-        menu.removeView(categories);
-
-        mHotNav = addNav(menu, getString(R.string.home_popular), R.drawable.ic_aetv_house, view -> {
-            showHot();
-            showChart(Section.SERIES.firstChart(), true);
-        });
-        addNav(menu, getString(R.string.home_keep), R.drawable.ic_home_keep, this::showLibrary);
-        addNavDivider(menu);
-        mVodNav = addNav(menu, getString(R.string.home_vod), R.drawable.ic_home_vod, view -> {
-            mShowAllCategories = false;
-            updateCategoryNavigation();
-        });
-        setNavIcons(mVodNav, R.drawable.ic_home_vod, R.drawable.ic_aetv_chevron_right);
-        menu.addView(categories);
-        mMoreNav = addNav(menu, getString(R.string.home_expand_categories), R.drawable.ic_aetv_chevron_down, view -> {
-            mShowAllCategories = !mShowAllCategories;
-            updateCategoryNavigation();
-            mVodNav.requestFocus();
-        });
-        mMoreNav.setTextSize(15);
-        addNavDivider(menu);
-
-        mSearchNav = addNav(menu, getString(R.string.home_search), R.drawable.ic_home_search, view -> showSearch(null));
-        mSearchNav.setOnLongClickListener(view -> {
-            showSearch(getHome().getKey());
-            return true;
-        });
-        addNav(menu, getString(R.string.home_live), R.drawable.ic_home_live, view -> LiveActivity.start(this));
-        mSettingsNav = addNav(menu, getString(R.string.home_setting), R.drawable.ic_home_setting, view -> openSetting());
-
-        updateCategoryNavigation();
-        selectNavigation(mHotNav);
-        mHotNav.requestFocus();
+    static void navigateFromResults(Activity activity, Destination destination, String category) {
+        Intent intent = new Intent(activity, HomeActivity.class).setAction(ACTION_FAMILY_NAV)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.putExtra(EXTRA_DESTINATION, destination.name());
+        intent.putExtra(EXTRA_CATEGORY, category);
+        activity.startActivity(intent);
+        activity.finish();
     }
 
-    private TextView addNav(LinearLayout menu, CharSequence label, int icon, View.OnClickListener click) {
-        TextView item = (TextView) getLayoutInflater().inflate(R.layout.item_aetv_navigation, menu, false);
-        item.setText(label);
-        setNavIcons(item, icon, 0);
-        item.setOnClickListener(click);
-        menu.addView(item);
-        return item;
-    }
-
-    private void setNavIcons(TextView item, int start, int end) {
-        item.setCompoundDrawablesRelative(navIcon(start), null, navIcon(end), null);
-        item.setCompoundDrawablePadding(ResUtil.dp2px(12));
-    }
-
-    private Drawable navIcon(int resource) {
-        if (resource == 0) return null;
-        Drawable icon = getDrawable(resource).mutate();
-        int size = ResUtil.dp2px(20);
-        icon.setBounds(0, 0, size, size);
-        return icon;
-    }
-
-    private void indentCategory(TextView item) {
-        item.setPaddingRelative(ResUtil.dp2px(44), item.getPaddingTop(), item.getPaddingEnd(), item.getPaddingBottom());
-        item.setTextSize(15);
-    }
-
-    private void addNavDivider(LinearLayout menu) {
-        View line = new View(this);
-        line.setBackgroundColor(getColor(R.color.aetv_divider));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ResUtil.dp2px(1));
-        params.setMargins(ResUtil.dp2px(12), ResUtil.dp2px(7), ResUtil.dp2px(12), ResUtil.dp2px(7));
-        menu.addView(line, params);
-    }
-
-    private void updateCategoryNavigation() {
-        LinearLayout categories = mBinding.categoryNavigation;
-        int count = categories.getChildCount();
-        for (int i = 0; i < count; i++) {
-            categories.getChildAt(i).setVisibility(mShowAllCategories || i < DEFAULT_CATEGORY_COUNT ? View.VISIBLE : View.GONE);
+    private void navigate(Destination destination, View view) {
+        mPendingCategory = null;
+        if (mWeb != null && mWeb.isVisible()) getVideo(true);
+        switch (destination) {
+            case HOME:
+                showHot();
+                showChart(Section.SERIES.firstChart(), true);
+                break;
+            case LIBRARY:
+                showLibrary(mNavigation.library());
+                break;
+            case SEARCH:
+                showSearch(null);
+                break;
+            case SCOPED_SEARCH:
+                showSearch(getHome().getKey());
+                break;
+            case LIVE:
+                LiveActivity.start(this);
+                return;
+            case SETTINGS:
+                openSetting();
+                break;
+            case CATEGORY:
+                return;
         }
-        mMoreNav.setVisibility(count > DEFAULT_CATEGORY_COUNT ? View.VISIBLE : View.GONE);
-        mMoreNav.setText(mShowAllCategories ? R.string.home_retract_categories : R.string.home_expand_categories);
-        setNavIcons(mMoreNav, mShowAllCategories ? R.drawable.ic_aetv_chevron_up : R.drawable.ic_aetv_chevron_down, 0);
+        if (view == null) mNavigation.focusSelected();
+    }
+
+    private void openCategory(String id) {
+        if (id == null) return;
+        for (Class type : Cache.types(getHome().getKey())) {
+            View item = mNavigation.category(id);
+            if (item != null && id.equals(type.getTypeId())) {
+                showCategory(type, item);
+                mNavigation.focusSelected();
+                return;
+            }
+        }
+        mPendingCategory = id;
     }
 
     private void setTypes(Result result) {
-        LinearLayout categories = mBinding.categoryNavigation;
-        categories.removeAllViews();
-        for (Class type : result.getTypes()) {
-            TextView nav = addNav(categories, type.getTypeName(), 0, view -> showCategory(type, view));
-            indentCategory(nav);
-            if (mCategory != null && type.getTypeId().equals(mCategory.getType().getTypeId())) selectNavigation(nav);
+        mNavigation.setTypes(result.getTypes(), this::showCategory);
+        if (mCategory != null) {
+            View item = mNavigation.category(mCategory.getType().getTypeId());
+            if (item != null) mNavigation.select(item);
         }
-        updateCategoryNavigation();
-    }
-
-    private void selectNavigation(View item) {
-        if (mSelectedNav != null) mSelectedNav.setActivated(false);
-        mSelectedNav = item;
-        item.setActivated(true);
+        if (mPendingCategory != null) {
+            String pending = mPendingCategory;
+            openCategory(pending);
+            mPendingCategory = null;
+        }
     }
 
     private void showCategory(Class type, View nav) {
         if (getSupportFragmentManager().isStateSaved()) return;
-        if (mCategory != null && mSelectedNav == nav) return;
+        if (mCategory != null && mNavigation.selected() == nav) return;
         clearPaneReferences();
         mCategory = FolderFragment.newInstance(getHome().getKey(), type);
         mCategoryFilter = false;
@@ -589,7 +560,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         options.putBoolean("embedded", true);
         options.putString("siteKey", siteKey);
         mSearch = SearchFragment.newInstance(options);
-        showPane(mSearch, mSearchNav);
+        showPane(mSearch, mNavigation.search());
     }
 
     private void clearPaneReferences() {
@@ -604,15 +575,15 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         Fragment previous = getSupportFragmentManager().findFragmentById(R.id.homeCategory);
         if (previous instanceof SearchFragment search) {
             mSearch = search;
-            selectPane(mSearchNav);
+            selectPane(mNavigation.search());
         } else if (previous instanceof SettingFragment settings) {
             mSettings = settings;
-            selectPane(mSettingsNav);
+            selectPane(mNavigation.settings());
         }
     }
 
     private void selectPane(View nav) {
-        selectNavigation(nav);
+        mNavigation.select(nav);
         mBinding.homeCategory.setVisibility(View.VISIBLE);
         mBinding.homePopular.setVisibility(View.GONE);
     }
@@ -626,7 +597,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         Fragment prior = getSupportFragmentManager().findFragmentById(R.id.homeCategory);
         if (prior != null) getSupportFragmentManager().beginTransaction().remove(prior).commitNowAllowingStateLoss();
         clearPaneReferences();
-        selectNavigation(mHotNav);
+        mNavigation.select(mNavigation.home());
         mBinding.homeCategory.setVisibility(View.GONE);
         mBinding.homePopular.setVisibility(View.VISIBLE);
     }
@@ -783,7 +754,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             else if (mSearch != null) mSearch.showDialog();
             else {
                 openSetting();
-                mSettingsNav.requestFocus();
+                mNavigation.settings().requestFocus();
             }
             return true;
         }
@@ -801,15 +772,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             return super.dispatchKeyEvent(event);
         }
         if (KeyUtil.isActionDown(event)) {
-            if (KeyUtil.isRightKey(event) && mBinding.homeNavigation.hasFocus()) {
+            if (KeyUtil.isRightKey(event) && mNavigation.hasFocus()) {
                 requestContentFocus();
                 return true;
             }
             if (mBinding.homePopular.isShown() && moveChartFocus(event)) return true;
             View focused = getCurrentFocus();
             if (KeyUtil.isLeftKey(event) && inContent(focused) && (mSearch == null || mSearch.canExitLeft(focused)) && atContentLeftEdge(focused)) {
-                View target = mSelectedNav.isShown() ? mSelectedNav : mVodNav;
-                target.requestFocus();
+                mNavigation.focusSelected();
                 return true;
             }
         }
@@ -900,7 +870,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mBinding.recycler.setSelectedPosition(position, new ViewHolderTask() {
             @Override
             public void run(RecyclerView.ViewHolder holder) {
-                if (mSelectedNav == mHotNav && (mBinding.homeNavigation.hasFocus() || mBinding.homeChartBars.hasFocus())) focusVideoHolder(holder);
+                if (mNavigation.selected() == mNavigation.home() && (mNavigation.hasFocus() || mBinding.homeChartBars.hasFocus())) focusVideoHolder(holder);
             }
         });
         return true;
@@ -944,18 +914,18 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             showContent();
         } else if (mSearch != null || mSettings != null) {
             showHot();
-            mHotNav.requestFocus();
+            mNavigation.home().requestFocus();
         } else if (mLibrary != null) {
             if (!mLibrary.closeDeleteMode()) {
                 showHot();
-                mHotNav.requestFocus();
+                mNavigation.home().requestFocus();
             }
         } else if (mCategory != null) {
             if (mCategory.canBack()) mCategory.goBack();
             else if (mCategoryFilter) toggleCategoryFilter();
             else {
                 showHot();
-                mHotNav.requestFocus();
+                mNavigation.home().requestFocus();
             }
         } else if (mBinding.recycler.getSelectedPosition() != 0) {
             mBinding.recycler.scrollToPosition(0);
@@ -1075,7 +1045,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (mSettings != null || getSupportFragmentManager().isStateSaved()) return;
         clearPaneReferences();
         mSettings = new SettingFragment();
-        showPane(mSettings, mSettingsNav);
+        showPane(mSettings, mNavigation.settings());
     }
 
     private void applyTvChrome(String mode) {

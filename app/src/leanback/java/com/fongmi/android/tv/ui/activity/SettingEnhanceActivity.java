@@ -77,7 +77,6 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.webHomeExtension.setOnLongClickListener(this::clearWebHomeExtension);
         mBinding.webHomeFullscreen.setOnClickListener(this::setWebHomeFullscreen);
         mBinding.cspWarmup.setOnClickListener(this::setCspWarmup);
-        mBinding.playbackArtworkWall.setOnClickListener(this::setPlaybackArtworkWall);
         mBinding.playbackWebhook.setOnClickListener(view -> ViewingRecordSyncDialog.show(this, this::setText));
         mBinding.managePage.setOnClickListener(view -> ManagePageDialog.show(this));
         mBinding.remoteTrust.setOnClickListener(view -> RemoteTrustDialog.show(this, this::setText));
@@ -108,7 +107,6 @@ public class SettingEnhanceActivity extends BaseActivity {
                 mBinding.managePage,
                 mBinding.webHomeFullscreen,
                 mBinding.cspWarmup,
-                mBinding.playbackArtworkWall,
                 mBinding.driveCheck,
                 mBinding.siteHealthSort,
                 mBinding.debugLog,
@@ -129,7 +127,6 @@ public class SettingEnhanceActivity extends BaseActivity {
         });
         safeSet("webHomeFullscreen", mBinding.webHomeFullscreenText, () -> getSwitch(Setting.isWebHomeFullscreen()));
         safeSet("cspWarmup", mBinding.cspWarmupText, this::getCspWarmupText);
-        safeSet("playbackArtworkWall", mBinding.playbackArtworkWallText, () -> getSwitch(Setting.isPlaybackArtworkWall()));
         safeSet("playbackWebhook", mBinding.playbackWebhookText, () -> ViewingRecordSyncStore.summary(this));
         safeSet("managePage", mBinding.managePageText, () -> getString(R.string.manage_page_web));
         safeSet("remoteTrust", mBinding.remoteTrustText, () -> RemoteStore.summary(this));
@@ -205,11 +202,6 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.debugLogText.setText(getSwitch(Setting.isDebugLog()));
         if (!Setting.isDebugLog()) return;
         DebugLogDialog.show(this);
-    }
-
-    private void setPlaybackArtworkWall(View view) {
-        Setting.putPlaybackArtworkWall(!Setting.isPlaybackArtworkWall());
-        mBinding.playbackArtworkWallText.setText(getSwitch(Setting.isPlaybackArtworkWall()));
     }
 
     private void setWebHomeFullscreen(View view) {

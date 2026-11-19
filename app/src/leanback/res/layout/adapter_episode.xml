@@ -12,6 +12,6 @@
     android:nextFocusUp="@id/array"
     android:nextFocusDown="@id/part"
     android:singleLine="true"
-    android:textColor="@color/text"
+    android:textColor="@color/aetv_video_text"
     android:textSize="16sp"
     tools:text="20" />

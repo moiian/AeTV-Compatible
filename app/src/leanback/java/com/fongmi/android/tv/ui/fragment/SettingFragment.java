@@ -13,7 +13,6 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
-import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
@@ -135,7 +134,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.live.setOnClickListener(this::onLive);
-        mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
         mBinding.language.setOnClickListener(this::setLanguage);
         mBinding.cache.setOnClickListener(this::onCache);
@@ -149,13 +147,9 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vodHome.setOnClickListener(this::onVodHome);
         mBinding.live.setOnLongClickListener(this::onLiveEdit);
         mBinding.liveHome.setOnClickListener(this::onLiveHome);
-        mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.incognito.setOnClickListener(this::setIncognito);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
-        mBinding.wallDefault.setOnClickListener(this::setWallDefault);
-        mBinding.wallRefresh.setOnClickListener(this::setWallRefresh);
-        mBinding.wallRefresh.setOnLongClickListener(this::onWallHistory);
     }
 
     @Override
@@ -176,10 +170,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
                 break;
             case 1:
                 LiveConfig.load(config, getCallback());
-                break;
-            case 2:
-                Setting.putWall(0);
-                WallConfig.load(config, getCallback());
                 break;
         }
     }
@@ -223,10 +213,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         ConfigDialog.create().live().show(getChildFragmentManager(), null);
     }
 
-    private void onWall(View view) {
-        ConfigDialog.create().wall().show(getChildFragmentManager(), null);
-    }
-
     private boolean onVodEdit(View view) {
         ConfigDialog.create().vod().edit().show(getChildFragmentManager(), null);
         return true;
@@ -234,11 +220,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
 
     private boolean onLiveEdit(View view) {
         ConfigDialog.create().live().edit().show(getChildFragmentManager(), null);
-        return true;
-    }
-
-    private boolean onWallEdit(View view) {
-        ConfigDialog.create().wall().edit().show(getChildFragmentManager(), null);
         return true;
     }
 
@@ -274,23 +255,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         AboutDialog.show(requireActivity(), () -> {
             if (isAdded()) Updater.create().force().start(requireActivity());
         });
-    }
-
-    private void setWallDefault(View view) {
-        Setting.putWall(Setting.nextDefaultWall());
-        Setting.putWallType(0);
-        setWallText();
-        ConfigEvent.wall();
-    }
-
-    private void setWallRefresh(View view) {
-        Setting.putWall(0);
-        WallConfig.get().load(getCallback());
-    }
-
-    private boolean onWallHistory(View view) {
-        HistoryDialog.create().wall().show(requireActivity(), this);
-        return true;
     }
 
     private void setIncognito(View view) {
@@ -367,21 +331,11 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onConfigEvent(ConfigEvent event) {
-        if (event.type() == ConfigEvent.Type.WALL) {
-            setWallText();
-            return;
-        }
         if (event.type() == ConfigEvent.Type.COMMON) updateSources();
     }
 
     private void updateSources() {
         mBinding.vodUrl.setText(VodConfig.getDesc());
         mBinding.liveUrl.setText(LiveConfig.getDesc());
-        setWallText();
     }
-
-    private void setWallText() {
-        mBinding.wallUrl.setText(Setting.getWallDesc(WallConfig.getDesc()));
-    }
-
 }

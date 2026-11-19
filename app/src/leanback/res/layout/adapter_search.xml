@@ -1,58 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginEnd="12dp"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/shape_aetv_result_card"
+    android:clipToOutline="true"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:foreground="@drawable/selector_vod">
+    android:foreground="@drawable/selector_aetv_result_focus"
+    android:orientation="vertical">
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/image"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/black_20"
         android:scaleType="centerCrop" />
-
-    <TextView
-        android:id="@+id/site"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignStart="@+id/image"
-        android:layout_alignTop="@+id/image"
-        android:background="@drawable/shape_vod_site"
-        android:ellipsize="end"
-        android:maxWidth="96dp"
-        android:singleLine="true"
-        android:textColor="@color/white"
-        android:textSize="13sp"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/remark"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_above="@+id/name"
-        android:layout_alignStart="@+id/image"
-        android:layout_alignEnd="@+id/image"
-        android:background="@drawable/shape_vod_remark"
-        android:ellipsize="end"
-        android:singleLine="true"
-        android:textColor="@color/white"
-        android:textSize="14sp" />
 
     <TextView
         android:id="@+id/name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/image"
-        android:layout_alignStart="@+id/image"
-        android:layout_alignEnd="@+id/image"
-        android:background="@drawable/shape_vod_name"
-        android:ellipsize="end"
-        android:gravity="center"
-        android:padding="6dp"
+        android:layout_marginTop="4dp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingHorizontal="8dp"
         android:singleLine="true"
         android:textColor="@color/white"
-        android:textSize="16sp" />
+        android:textSize="15sp" />
 
-</RelativeLayout>
+    <TextView
+        android:id="@+id/metadata"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:paddingHorizontal="8dp"
+        android:singleLine="true"
+        android:textColor="@color/aetv_text_muted"
+        android:textSize="12sp" />
+
+</LinearLayout>
