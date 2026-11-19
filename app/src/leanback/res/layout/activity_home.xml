@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:paddingTop="80dp">
+        android:paddingTop="0dp">
 
         <androidx.leanback.widget.HorizontalGridView
             android:id="@+id/typeRecycler"
@@ -61,6 +61,7 @@
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/toolbar"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"

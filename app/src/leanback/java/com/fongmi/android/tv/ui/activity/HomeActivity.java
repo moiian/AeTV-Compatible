@@ -45,6 +45,7 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.model.HotTvViewModel;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
@@ -108,6 +109,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private WebView mHomeWeb;
     private Result mResult;
     private Result mHomeResult;
+    private List<Vod> mHotTv;
+    private int mRecommendHeader = R.string.home_hot_tv;
+    private boolean mLoadingSite;
     private Clock mClock;
     private String webChromeMode = TV_NORMAL;
     private String webDefaultChromeMode = TV_FULL;
@@ -147,8 +151,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mClock = Clock.create(mBinding.clock);
         mBinding.progressLayout.showProgress();
         setRecyclerView();
-        setViewModel();
         setAdapter();
+        setViewModel();
         runAfterFirstFrame(this::initAfterFirstFrame);
         SpiderDebug.log("startup", "home initView end cost=%sms", System.currentTimeMillis() - App.time());
     }
@@ -195,7 +199,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void updateToolbarVisibility(boolean visible) {
-        mBinding.toolbar.setVisibility(visible && webToolbarVisible ? View.VISIBLE : View.GONE);
+        boolean webHomeVisible = mBinding.webOverlay.getVisibility() == View.VISIBLE;
+        mBinding.toolbar.setVisibility(visible && webToolbarVisible && webHomeVisible ? View.VISIBLE : View.GONE);
         syncNativeContentInset();
         syncWebOverlayLayout();
     }
@@ -259,7 +264,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         selector.addPresenter(String.class, new ProgressPresenter());
         selector.addPresenter(Vod.class, new VodPresenter(this, Style.list()));
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16), VodPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16), FuncPresenter.class);
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(8), FuncPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
@@ -293,14 +298,34 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.getResult().observe(this, result -> {
             boolean categoryResult = isHomeCategoryResult(result);
-            mAdapter.remove("progress");
+            mLoadingSite = false;
             if (!categoryResult) {
                 Cache.clear().put(result);
                 setTypes(mHomeResult = result);
             }
             mResult = result;
-            addVideo(result);
+            if (mHotTv != null && mHotTv.isEmpty()) {
+                mAdapter.remove("progress");
+                addVideo(result);
+            }
         });
+        HotTvViewModel hotTv = new ViewModelProvider(this).get(HotTvViewModel.class);
+        hotTv.getItems().observe(this, this::onHotTv);
+        hotTv.load();
+    }
+
+    private void onHotTv(List<Vod> items) {
+        mHotTv = items;
+        clearRecommendRows();
+        if (items.isEmpty()) {
+            int position = mAdapter.indexOf(mRecommendHeader);
+            mRecommendHeader = R.string.home_recommend;
+            mAdapter.replace(position, mRecommendHeader);
+            if (mLoadingSite) mAdapter.add("progress");
+            else addVideo(mResult);
+        } else {
+            addGrid(items, Style.rect());
+        }
     }
 
     private boolean isHomeCategoryResult(Result result) {
@@ -311,7 +336,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
         mAdapter.add(new ListRow(mFuncAdapter = new ArrayObjectAdapter(new FuncPresenter(this))));
         mAdapter.add(R.string.home_history);
-        mAdapter.add(R.string.home_recommend);
+        mAdapter.add(mRecommendHeader);
+        mAdapter.add("progress");
     }
 
     private void setTitle() {
@@ -404,14 +430,17 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mResult = Result.empty();
         mHomeResult = Result.empty();
         loadingHomeCategory = false;
-        clearRecommendRows();
-        mAdapter.add("progress");
+        mLoadingSite = true;
+        if (mHotTv != null && mHotTv.isEmpty()) {
+            clearRecommendRows();
+            mAdapter.add("progress");
+        }
         mViewModel.homeContent();
     }
 
     private void showWebOverlay() {
         mBinding.webOverlay.setVisibility(View.VISIBLE);
-        syncWebOverlayLayout();
+        updateToolbarVisibility(webToolbarVisible);
     }
 
     private void hideWebOverlay() {
@@ -425,7 +454,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             return;
         }
         mTypeAdapter.addAll(result.getTypes());
-        mBinding.typeRecycler.setVisibility(View.VISIBLE);
+        mBinding.typeRecycler.setVisibility(View.GONE);
     }
 
     private void addVideo(Result result) {
@@ -462,10 +491,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void setFunc() {
         List<Func> items = new ArrayList<>();
+        items.add(Func.create(R.string.home_vod));
         if (LiveConfig.hasUrl()) items.add(Func.create(R.string.home_live));
         items.add(Func.create(R.string.home_search));
         items.add(Func.create(R.string.home_keep));
         items.add(Func.create(R.string.home_push));
+        items.add(Func.create(R.string.home_site));
         items.add(Func.create(R.string.home_setting));
         mFuncAdapter.setItems(items, new BaseDiffCallback<Func>());
     }
@@ -502,7 +533,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private int getRecommendIndex() {
-        return mAdapter.indexOf(R.string.home_recommend) + 1;
+        return mAdapter.indexOf(mRecommendHeader) + 1;
     }
 
     private void setLogo() {
@@ -543,7 +574,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 getHistory();
                 break;
             case SIZE:
-                getVideo();
+                if (mHotTv != null && !mHotTv.isEmpty()) {
+                    clearRecommendRows();
+                    addGrid(mHotTv, Style.rect());
+                } else {
+                    getVideo();
+                }
                 getHistory(true);
                 break;
         }
@@ -586,7 +622,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onItemClick(Func item) {
-        if (item.getResId() == R.string.home_live) LiveActivity.start(this);
+        if (item.getResId() == R.string.home_vod) {
+            Result result = mHomeResult.getTypes().isEmpty() ? mResult : mHomeResult;
+            VodActivity.start(this, getHome().getKey(), result, 0);
+        } else if (item.getResId() == R.string.home_site) showDialog();
+        else if (item.getResId() == R.string.home_live) LiveActivity.start(this);
         else if (item.getResId() == R.string.home_keep) KeepActivity.start(this);
         else if (item.getResId() == R.string.home_push) PushActivity.start(this);
         else if (item.getResId() == R.string.home_search) SearchActivity.start(this);
@@ -613,7 +653,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onItemClick(Vod item) {
-        if (item.isAction()) mViewModel.action(getHome().getKey(), item.getAction());
+        if (mHotTv != null && !mHotTv.isEmpty()) CollectActivity.start(this, item.getName());
+        else if (item.isAction()) mViewModel.action(getHome().getKey(), item.getAction());
         else if (getHome().isIndex()) CollectActivity.start(this, item.getName());
         else VideoActivity.start(this, getHome().getKey(), item.getId(), item.getName(), item.getPic());
     }
