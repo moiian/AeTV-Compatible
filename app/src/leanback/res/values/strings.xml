@@ -15,8 +15,14 @@
     <string name="control_compact_episode_title">Compact title</string>
     <string name="control_track">Track</string>
     <string name="home_site">Sources</string>
-    <string name="home_hot_tv">Popular Chinese TV on Douban</string>
-    <string name="home_popular">Popular</string>
+    <string name="home_popular">Home</string>
+    <string name="home_chart_domestic">Chinese series</string>
+    <string name="home_chart_western">Western series</string>
+    <string name="home_chart_japanese">Japanese series</string>
+    <string name="home_chart_korean">Korean series</string>
+    <string name="home_chart_documentary">Documentaries</string>
+    <string name="home_expand_categories">Show more</string>
+    <string name="home_retract_categories">Show fewer</string>
     <string name="home_history">History</string>
     <string name="home_recommend">Recommend</string>
 

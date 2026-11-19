@@ -15,8 +15,14 @@
     <string name="control_compact_episode_title">精简标题</string>
     <string name="control_track">轨道</string>
     <string name="home_site">切换站点</string>
-    <string name="home_hot_tv">豆瓣热门国产剧</string>
-    <string name="home_popular">热门</string>
+    <string name="home_popular">首页</string>
+    <string name="home_chart_domestic">国产剧</string>
+    <string name="home_chart_western">欧美剧</string>
+    <string name="home_chart_japanese">日剧</string>
+    <string name="home_chart_korean">韩剧</string>
+    <string name="home_chart_documentary">纪录片</string>
+    <string name="home_expand_categories">展开</string>
+    <string name="home_retract_categories">收起</string>
     <string name="home_history">最近观看</string>
     <string name="home_recommend">更新推荐</string>
 

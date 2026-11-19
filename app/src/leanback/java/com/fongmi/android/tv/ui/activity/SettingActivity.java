@@ -109,11 +109,6 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     protected void initEvent() {
         mBinding.homeSiteAction.setOnClickListener(view -> SiteDialog.create().show(this));
         mBinding.homePushAction.setOnClickListener(view -> PushActivity.start(this));
-        mBinding.homeSearchAction.setOnClickListener(view -> SearchActivity.start(this));
-        mBinding.homeSearchAction.setOnLongClickListener(view -> {
-            SearchActivity.start(this, "", VodConfig.get().getHome().getKey());
-            return true;
-        });
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.live.setOnClickListener(this::onLive);

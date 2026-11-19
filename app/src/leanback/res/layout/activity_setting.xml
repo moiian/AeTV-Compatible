@@ -92,11 +92,6 @@
                 style="@style/AeTVSettingsShortcut"
                 android:text="@string/home_push" />
 
-            <TextView
-                android:id="@+id/homeSearchAction"
-                style="@style/AeTVSettingsShortcut"
-                android:text="@string/home_search" />
-
         </LinearLayout>
 
         <androidx.appcompat.widget.LinearLayoutCompat

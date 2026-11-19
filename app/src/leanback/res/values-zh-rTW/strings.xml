@@ -15,8 +15,14 @@
     <string name="control_compact_episode_title">精簡標題</string>
     <string name="control_track">軌道</string>
     <string name="home_site">切換站點</string>
-    <string name="home_hot_tv">豆瓣熱門陸劇</string>
-    <string name="home_popular">熱門</string>
+    <string name="home_popular">首頁</string>
+    <string name="home_chart_domestic">國產劇</string>
+    <string name="home_chart_western">歐美劇</string>
+    <string name="home_chart_japanese">日劇</string>
+    <string name="home_chart_korean">韓劇</string>
+    <string name="home_chart_documentary">紀錄片</string>
+    <string name="home_expand_categories">展開</string>
+    <string name="home_retract_categories">收起</string>
     <string name="home_history">最近觀看</string>
     <string name="home_recommend">更新推薦</string>
 

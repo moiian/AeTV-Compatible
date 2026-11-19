@@ -23,8 +23,12 @@ public class HistoryPresenter extends Presenter {
     private boolean delete;
 
     public HistoryPresenter(OnClickListener listener) {
+        this(listener, 0);
+    }
+
+    public HistoryPresenter(OnClickListener listener, int inset) {
         this.listener = listener;
-        setLayoutSize();
+        setLayoutSize(inset);
     }
 
     public interface OnClickListener {
@@ -36,9 +40,9 @@ public class HistoryPresenter extends Presenter {
         boolean onLongClick();
     }
 
-    private void setLayoutSize() {
+    private void setLayoutSize(int inset) {
         int space = ResUtil.dp2px(48) + ResUtil.dp2px(16 * (Product.getColumn() - 1));
-        int base = ResUtil.getScreenWidth() - space;
+        int base = ResUtil.getScreenWidth() - space - inset;
         width = base / Product.getColumn();
         height = (int) (width / 0.75f);
     }
