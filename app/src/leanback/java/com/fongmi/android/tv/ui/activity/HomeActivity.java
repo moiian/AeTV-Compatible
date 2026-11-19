@@ -123,6 +123,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private WebView mHomeWeb;
     private List<Vod> mHotTv;
     private HotTvViewModel mHotTvModel;
+    private boolean mInitialCardFocusPending;
     private TextView mSelectedSection;
     private TextView mSelectedChart;
     private TextView mSelectedRegion;
@@ -159,6 +160,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     protected void initView(Bundle savedInstanceState) {
         SpiderDebug.log("startup", "home initView start cost=%sms", System.currentTimeMillis() - App.time());
+        String action = getIntent().getAction();
+        mInitialCardFocusPending = savedInstanceState == null && (action == null || Intent.ACTION_MAIN.equals(action));
         mClock = Clock.create(mBinding.clock);
         mBinding.progressLayout.showProgress();
         setRecyclerView();
@@ -201,6 +204,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
                 updateToolbarVisibility(isTopRow(position));
+                if (position == 0 && child != null && canFocusInitialCard()) focusInitialCard(child);
             }
         });
     }
@@ -373,6 +377,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         else if (!items.isEmpty()) {
             addGrid(items, Style.rect());
             mBinding.recycler.scrollToPosition(0);
+            requestInitialCardFocus();
+        } else {
+            mInitialCardFocusPending = false;
         }
     }
 
@@ -415,6 +422,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         getVideo();
         if (familyNavigation) checkAction(getIntent());
         setFocus();
+        requestInitialCardFocus();
         App.post(this::prewarmWebView, 1500);
         SpiderDebug.log("startup", "home showContent end cost=%sms", System.currentTimeMillis() - App.time());
     }
@@ -438,6 +446,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setFocus() {
+        if (mInitialCardFocusPending) {
+            mNavigation.home().requestFocus();
+            return;
+        }
         if (!mNavigation.hasFocus() && !requestContentFocus()) mNavigation.home().requestFocus();
     }
 
@@ -483,6 +495,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void navigate(Destination destination, View view) {
+        mInitialCardFocusPending = false;
         mPendingCategory = null;
         if (mWeb != null && mWeb.isVisible()) getVideo(true);
         switch (destination) {
@@ -583,6 +596,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void selectPane(View nav) {
+        mInitialCardFocusPending = false;
         mNavigation.select(nav);
         mBinding.homeCategory.setVisibility(View.VISIBLE);
         mBinding.homePopular.setVisibility(View.GONE);
@@ -747,6 +761,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (KeyUtil.isActionDown(event)) mInitialCardFocusPending = false;
         if (KeyUtil.isMenuKey(event)) {
             if (!KeyUtil.isActionDown(event) || event.getRepeatCount() > 0) return true;
             if (mWeb != null && mWeb.isVisible()) showDialog();
@@ -856,6 +871,39 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             if (isVideoRow(i)) return focusVideoRow(i);
         }
         return false;
+    }
+
+    private boolean canFocusInitialCard() {
+        return mInitialCardFocusPending && mBinding.recycler.isShown()
+                && mNavigation.home().hasFocus() && isVideoRow(0)
+                && Section.SERIES.firstChart().equals(mHotTvModel.getChart());
+    }
+
+    private void requestInitialCardFocus() {
+        if (!canFocusInitialCard()) return;
+        mBinding.recycler.setSelectedPosition(0, new ViewHolderTask() {
+            @Override
+            public void run(RecyclerView.ViewHolder holder) {
+                if (canFocusInitialCard()) focusInitialCard(holder);
+            }
+        });
+    }
+
+    private void focusInitialCard(RecyclerView.ViewHolder holder) {
+        if (!(holder instanceof ItemBridgeAdapter.ViewHolder bridge)
+                || !(bridge.getViewHolder() instanceof ListRowPresenter.ViewHolder row)) return;
+        HorizontalGridView cards = row.getGridView();
+        RecyclerView.ViewHolder first = cards.findViewHolderForAdapterPosition(0);
+        if (first != null && first.itemView.requestFocus()) {
+            mInitialCardFocusPending = false;
+        } else {
+            cards.setSelectedPosition(0, new ViewHolderTask() {
+                @Override
+                public void run(RecyclerView.ViewHolder card) {
+                    if (canFocusInitialCard() && card.itemView.requestFocus()) mInitialCardFocusPending = false;
+                }
+            });
+        }
     }
 
     private boolean isVideoRow(int position) {

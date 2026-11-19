@@ -156,11 +156,11 @@ public class CollectActivity extends BaseActivity implements SearchAdapter.OnCli
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class).init();
         mViewModel.getSearch().observe(this, this::addResults);
         mViewModel.getSearchProgress().observe(this, progress -> {
-            if (mLeavingForPlayback) return;
-            mBinding.searchProgress.setVisibility(progress.finished() ? View.GONE : View.VISIBLE);
-            if (progress.finished() && mSearchAdapter.getItemCount() == 0 && mPendingItems.isEmpty()) {
+            if (progress == null || mLeavingForPlayback) return;
+            boolean finished = progress.finished();
+            mBinding.searchProgress.setVisibility(finished ? View.GONE : View.VISIBLE);
+            if (finished && mSearchAdapter.getItemCount() == 0 && mPendingItems.isEmpty())
                 mBinding.searchEmpty.setVisibility(View.VISIBLE);
-            }
         });
         mViewModel.getResult().observe(this, this::setSearch);
     }
