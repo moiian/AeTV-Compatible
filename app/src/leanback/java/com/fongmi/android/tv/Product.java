@@ -19,10 +19,14 @@ public class Product {
     }
 
     public static int[] getSpec(Style style) {
-        int column = getColumn(style);
+        return getSpecWithInset(style, 0);
+    }
+
+    public static int[] getSpecWithInset(Style style, int inset) {
+        int column = Math.max(1, getColumn(style));
         int space = ResUtil.dp2px(48) + ResUtil.dp2px(16 * (column - 1));
         if (style.isOval()) space += ResUtil.dp2px(column * 16);
-        return getSpec(space, column, style);
+        return getSpec(space + inset, column, style);
     }
 
     public static int[] getSpec(int space, int column, Style style) {

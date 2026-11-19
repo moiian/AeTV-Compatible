@@ -15,7 +15,8 @@
     <string name="control_compact_episode_title">Compact title</string>
     <string name="control_track">Track</string>
     <string name="home_site">Sources</string>
-    <string name="home_hot_tv">Douban Popular TV</string>
+    <string name="home_hot_tv">Popular Chinese TV on Douban</string>
+    <string name="home_popular">Popular</string>
     <string name="home_history">History</string>
     <string name="home_recommend">Recommend</string>
 

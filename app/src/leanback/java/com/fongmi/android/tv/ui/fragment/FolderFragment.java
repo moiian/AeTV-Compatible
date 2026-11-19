@@ -46,10 +46,6 @@ public class FolderFragment extends BaseFragment {
         return (TypeFragment) getChildFragmentManager().findFragmentById(R.id.container);
     }
 
-    private VodActivity getParent() {
-        return (VodActivity) getActivity();
-    }
-
     @Override
     protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
         return mBinding = FragmentFolderBinding.inflate(inflater, container, false);
@@ -58,7 +54,7 @@ public class FolderFragment extends BaseFragment {
     @Override
     protected void initView() {
         mType = getType();
-        getChildFragmentManager().beginTransaction().replace(R.id.container, TypeFragment.newInstance(getKey(), mType.getTypeId(), mType.getStyle(), getExtend(), mType.isFolder())).commit();
+        if (getChild() == null) getChildFragmentManager().beginTransaction().replace(R.id.container, TypeFragment.newInstance(getKey(), mType.getTypeId(), mType.getStyle(), getExtend(), mType.isFolder())).commit();
     }
 
     private HashMap<String, String> getExtend() {
@@ -70,7 +66,7 @@ public class FolderFragment extends BaseFragment {
     public void openFolder(String typeId, HashMap<String, String> extend) {
         TypeFragment next = TypeFragment.newInstance(getKey(), typeId, mType.getStyle(), extend, mType.isFolder());
         FragmentTransaction ft = getChildFragmentManager().beginTransaction();
-        Optional.ofNullable(getParent()).ifPresent(VodActivity::closeFilter);
+        if (getActivity() instanceof VodActivity activity) activity.closeFilter();
         Optional.ofNullable(getChild()).ifPresent(ft::hide);
         ft.add(R.id.container, next);
         ft.addToBackStack(null);

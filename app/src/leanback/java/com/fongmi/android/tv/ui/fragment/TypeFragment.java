@@ -30,6 +30,7 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentTypeBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
+import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
@@ -130,7 +131,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16), VodPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(8, FocusHighlight.ZOOM_FACTOR_NONE, HorizontalGridView.FOCUS_SCROLL_ALIGNED), FilterPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
-        mBinding.recycler.setHeader(getActivity(), R.id.recycler);
+        if (!(getActivity() instanceof HomeActivity)) mBinding.recycler.setHeader(getActivity(), R.id.recycler);
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
     }
 
@@ -202,7 +203,8 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private void addGrid(List<Vod> items, Style style) {
         if (checkLastSize(items, style)) return;
         List<ListRow> rows = new ArrayList<>();
-        VodPresenter presenter = new VodPresenter(this, style);
+        int inset = getActivity() instanceof HomeActivity ? getResources().getDimensionPixelSize(R.dimen.home_nav_width) : 0;
+        VodPresenter presenter = new VodPresenter(this, style, Product.getSpecWithInset(style, inset));
         for (List<Vod> part : Lists.partition(items, Product.getColumn(style))) {
             mLast = new ArrayObjectAdapter(presenter);
             mLast.addAll(0, part);

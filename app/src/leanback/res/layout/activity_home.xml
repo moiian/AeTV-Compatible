@@ -5,52 +5,74 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.appcompat.widget.LinearLayoutCompat
+    <LinearLayout
         android:id="@+id/nativeContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingTop="0dp">
+        android:orientation="horizontal">
 
-        <androidx.leanback.widget.HorizontalGridView
-            android:id="@+id/typeRecycler"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:clipChildren="false"
-            android:clipToPadding="false"
-            android:nextFocusUp="@id/title"
-            android:nextFocusDown="@id/recycler"
-            android:paddingStart="24dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="24dp"
-            android:paddingBottom="8dp"
-            android:visibility="gone"
-            app:focusOutEnd="false"
-            app:focusOutFront="false"
-            tools:visibility="visible" />
+        <ScrollView
+            android:id="@+id/homeNavigation"
+            android:layout_width="@dimen/home_nav_width"
+            android:layout_height="match_parent"
+            android:background="#D7121C2C"
+            android:fillViewport="true"
+            android:focusable="false"
+            android:scrollbars="none">
 
-        <com.fongmi.android.tv.ui.custom.ProgressLayout
-            android:id="@+id/progressLayout"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
+            <LinearLayout
+                android:id="@+id/navigationItems"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="16dp">
 
-            <androidx.leanback.widget.VerticalGridView
-                android:id="@+id/recycler"
+                <LinearLayout
+                    android:id="@+id/categoryNavigation"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
+
+            </LinearLayout>
+        </ScrollView>
+
+        <FrameLayout
+            android:id="@+id/homeContentPane"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clipChildren="false">
+
+            <com.fongmi.android.tv.ui.custom.ProgressLayout
+                android:id="@+id/progressLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <androidx.leanback.widget.VerticalGridView
+                    android:id="@+id/recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:paddingStart="24dp"
+                    android:paddingTop="20dp"
+                    android:paddingEnd="24dp"
+                    android:paddingBottom="24dp"
+                    app:focusOutEnd="true"
+                    app:focusOutFront="true" />
+
+            </com.fongmi.android.tv.ui.custom.ProgressLayout>
+
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/homeCategory"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:nextFocusUp="@id/typeRecycler"
-                android:paddingStart="24dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="24dp"
-                android:paddingBottom="24dp"
-                app:focusOutEnd="true"
-                app:focusOutFront="true" />
+                android:visibility="gone" />
 
-        </com.fongmi.android.tv.ui.custom.ProgressLayout>
-    </androidx.appcompat.widget.LinearLayoutCompat>
+        </FrameLayout>
+    </LinearLayout>
 
     <FrameLayout
         android:id="@+id/webOverlay"
@@ -88,7 +110,6 @@
             android:layout_weight="1"
             android:ellipsize="marquee"
             android:focusable="false"
-            android:nextFocusDown="@id/typeRecycler"
             android:singleLine="true"
             android:text="@string/app_name"
             android:textColor="@color/white"

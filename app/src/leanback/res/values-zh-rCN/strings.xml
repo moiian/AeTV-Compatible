@@ -15,7 +15,8 @@
     <string name="control_compact_episode_title">精简标题</string>
     <string name="control_track">轨道</string>
     <string name="home_site">切换站点</string>
-    <string name="home_hot_tv">豆瓣热门剧集</string>
+    <string name="home_hot_tv">豆瓣热门国产剧</string>
+    <string name="home_popular">热门</string>
     <string name="home_history">最近观看</string>
     <string name="home_recommend">更新推荐</string>
 

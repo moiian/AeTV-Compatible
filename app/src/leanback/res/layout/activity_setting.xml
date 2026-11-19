@@ -76,6 +76,29 @@
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/homeSiteAction"
+                style="@style/AeTVSettingsShortcut"
+                android:text="@string/home_site" />
+
+            <TextView
+                android:id="@+id/homePushAction"
+                style="@style/AeTVSettingsShortcut"
+                android:text="@string/home_push" />
+
+            <TextView
+                android:id="@+id/homeSearchAction"
+                style="@style/AeTVSettingsShortcut"
+                android:text="@string/home_search" />
+
+        </LinearLayout>
+
         <androidx.appcompat.widget.LinearLayoutCompat
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

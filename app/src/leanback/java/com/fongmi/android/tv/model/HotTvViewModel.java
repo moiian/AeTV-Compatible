@@ -14,6 +14,7 @@ import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
@@ -24,7 +25,7 @@ import okhttp3.ResponseBody;
 
 public class HotTvViewModel extends ViewModel {
 
-    private static final String URL = "https://movie.douban.com/j/search_subjects?type=tv&tag=%E7%83%AD%E9%97%A8&sort=recommend&page_limit=20&page_start=0";
+    private static final String URL = "https://m.douban.com/rexxar/api/v2/subject/recent_hot/tv?start=0&limit=20&category=tv&type=tv_domestic";
     private static final long TIMEOUT_MS = 8_000;
 
     private final MutableLiveData<List<Vod>> items = new MutableLiveData<>();
@@ -36,7 +37,7 @@ public class HotTvViewModel extends ViewModel {
 
     public void load() {
         if (call != null) return;
-        call = OkHttp.newCall(URL);
+        call = OkHttp.newCall(URL, Map.of("Referer", "https://movie.douban.com/tv/"));
         call.timeout().timeout(TIMEOUT_MS, TimeUnit.MILLISECONDS);
         call.enqueue(new Callback() {
             @Override
@@ -57,7 +58,7 @@ public class HotTvViewModel extends ViewModel {
     }
 
     static List<Vod> parse(String response) {
-        JsonElement subjects = Json.safeObject(Json.parse(response)).get("subjects");
+        JsonElement subjects = Json.safeObject(Json.parse(response)).get("items");
         if (!(subjects instanceof JsonArray list)) return Collections.emptyList();
         List<Vod> items = new ArrayList<>();
         for (JsonElement element : list) {
@@ -69,7 +70,10 @@ public class HotTvViewModel extends ViewModel {
             Vod item = new Vod();
             item.setId(id);
             item.setName(title);
-            item.setPic(Json.safeString(subject, "cover"));
+            JsonObject pictures = Json.safeObject(subject.get("pic"));
+            String cover = Json.safeString(pictures, "large");
+            if (cover.isEmpty()) cover = Json.safeString(pictures, "normal");
+            if (!cover.isEmpty()) item.setPic(cover + "@Referer=https://movie.douban.com/");
             items.add(item);
         }
         return items;
