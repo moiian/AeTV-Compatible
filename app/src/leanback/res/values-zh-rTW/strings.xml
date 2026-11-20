@@ -66,4 +66,7 @@
     <string name="setting_source_history">訂閱記錄</string>
     <string name="setting_default_wall">內建桌布</string>
     <string name="setting_refresh_wall">重新整理桌布</string>
+    <string name="home_subscription_switch">切換訂閱</string>
+    <string name="home_subscription_no_sites">這個訂閱沒有可用站點。</string>
+    <string name="home_subscription_no_detail">這個結果暫時無法開啟。</string>
 </resources>

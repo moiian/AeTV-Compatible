@@ -66,4 +66,7 @@
     <string name="setting_source_history">History</string>
     <string name="setting_default_wall">Built-in</string>
     <string name="setting_refresh_wall">Refresh</string>
+    <string name="home_subscription_switch">Switch subscription</string>
+    <string name="home_subscription_no_sites">The subscription has no available sites.</string>
+    <string name="home_subscription_no_detail">This result could not be opened.</string>
 </resources>

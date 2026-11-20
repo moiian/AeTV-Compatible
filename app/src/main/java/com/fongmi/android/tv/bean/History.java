@@ -121,13 +121,25 @@ public class History implements Diffable<History> {
         return AppDatabase.get().getHistoryDao().find(cid, System.currentTimeMillis() - Constant.HISTORY_TIME);
     }
 
+    public static List<History> getRecentLocal() {
+        return AppDatabase.get().getHistoryDao().findRecent();
+    }
+
     public static History find(String key) {
-        return AppDatabase.get().getHistoryDao().find(VodConfig.getCid(), key);
+        return find(VodConfig.getCid(), key);
+    }
+
+    public static History find(int cid, String key) {
+        return AppDatabase.get().getHistoryDao().find(cid, key);
     }
 
     public static List<History> findByName(String name) {
+        return findByName(VodConfig.getCid(), name);
+    }
+
+    private static List<History> findByName(int cid, String name) {
         try {
-            return AppDatabase.get().getHistoryDao().findByName(VodConfig.getCid(), name);
+            return AppDatabase.get().getHistoryDao().findByName(cid, name);
         } catch (Exception e) {
             return Collections.emptyList();
         }
@@ -384,7 +396,7 @@ public class History implements Diffable<History> {
 
     private History merge(boolean force) {
         if (!canMergeByName()) return this;
-        return merge(findByName(getVodName()), force);
+        return merge(findByName(getCid(), getVodName()), force);
     }
 
     private History merge(List<History> items, boolean force) {
@@ -408,7 +420,7 @@ public class History implements Diffable<History> {
     }
 
     public History delete() {
-        AppDatabase.get().getHistoryDao().delete(VodConfig.getCid(), getKey());
+        AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
         AppDatabase.get().getTrackDao().delete(getKey());
         return this;
     }

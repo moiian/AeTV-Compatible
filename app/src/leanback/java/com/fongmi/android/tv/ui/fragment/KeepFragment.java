@@ -14,11 +14,14 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.databinding.ActivityKeepBinding;
+import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
@@ -31,6 +34,7 @@ import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.ui.presenter.HistoryPresenter;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
@@ -66,7 +70,7 @@ public class KeepFragment extends BaseFragment implements KeepAdapter.OnClickLis
         mHistoryPresenter = new HistoryPresenter(new HistoryPresenter.OnClickListener() {
             @Override
             public void onItemClick(History item) {
-                VideoActivity.start(requireActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), null, item.getWallPic());
+                openLocalItem(item.getCid(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getWallPic());
             }
 
             @Override
@@ -78,7 +82,10 @@ public class KeepFragment extends BaseFragment implements KeepAdapter.OnClickLis
             @Override
             public boolean onLongClick() {
                 if (mHistoryPresenter.isDelete()) {
-                    History.deleteAndSync(VodConfig.getCid());
+                    for (int cid : AppDatabase.get().getHistoryDao().findConfigIds()) {
+                        if (cid > 0) History.deleteAndSync(cid);
+                        else History.delete(cid);
+                    }
                     setHistoryDelete(false);
                     getHistory();
                 } else {
@@ -94,7 +101,7 @@ public class KeepFragment extends BaseFragment implements KeepAdapter.OnClickLis
     }
 
     private void getHistory() {
-        mHistoryAdapter.setItems(History.get(), new BaseDiffCallback<History>());
+        mHistoryAdapter.setItems(History.getRecentLocal(), new BaseDiffCallback<History>());
         boolean empty = mHistoryAdapter.size() == 0;
         mBinding.historyRow.setVisibility(empty ? View.GONE : View.VISIBLE);
         mBinding.historyEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
@@ -110,19 +117,62 @@ public class KeepFragment extends BaseFragment implements KeepAdapter.OnClickLis
         mAdapter.setItems(Keep.getVod());
     }
 
-    private void loadConfig(Config config, Keep item) {
+    private void openLocalItem(int cid, String site, String id, String title, String poster, String wallPic) {
         Activity activity = requireActivity();
-        VodConfig.load(config, new Callback() {
-            @Override
-            public void success() {
-                if (!activity.isFinishing() && !activity.isDestroyed()) VideoActivity.start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        Runnable open = () -> {
+            if (activity.isFinishing() || activity.isDestroyed()) return;
+            if (SiteApi.PUSH.equals(site) || WebHomeInlineVodStore.KEY.equals(site) || !VodConfig.get().getSite(site).isEmpty()) {
+                VideoActivity.start(activity, site, id, title, poster, null, wallPic);
+            } else {
+                CollectActivity.start(activity, title);
             }
+        };
+        Config config = Config.find(cid);
+        if (cid == VodConfig.getCid() || SiteApi.PUSH.equals(site) || WebHomeInlineVodStore.KEY.equals(site)) {
+            open.run();
+        } else if (config == null || config.isEmpty()) {
+            CollectActivity.start(activity, title);
+        } else {
+            Config previous = VodConfig.get().getConfig();
+            VodConfig.load(config, new Callback() {
+                @Override
+                public void start() {
+                    Notify.progress(activity);
+                }
 
-            @Override
-            public void error(String msg) {
-                Notify.show(msg);
-            }
-        });
+                @Override
+                public void success() {
+                    Notify.dismiss();
+                    open.run();
+                }
+
+                @Override
+                public void error(String msg) {
+                    VodConfig.load(previous, new Callback() {
+                        @Override
+                        public void success() {
+                            fallback();
+                        }
+
+                        @Override
+                        public void error(String error) {
+                            fallback();
+                        }
+
+                        private void fallback() {
+                            Notify.dismiss();
+                            Notify.show(msg);
+                            if (!activity.isFinishing() && !activity.isDestroyed()) CollectActivity.start(activity, title);
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onConfigEvent(ConfigEvent event) {
+        if (event.isVod()) mHistoryAdapter.notifyArrayItemRangeChanged(0, mHistoryAdapter.size());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -133,10 +183,7 @@ public class KeepFragment extends BaseFragment implements KeepAdapter.OnClickLis
 
     @Override
     public void onItemClick(Keep item) {
-        Config config = Config.find(item.getCid());
-        if (config == null) CollectActivity.start(requireActivity(), item.getVodName());
-        else if (item.getCid() != VodConfig.getCid()) loadConfig(config, item);
-        else VideoActivity.start(requireActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        openLocalItem(item.getCid(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), null);
     }
 
     @Override

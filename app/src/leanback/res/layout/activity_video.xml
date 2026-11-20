@@ -740,7 +740,7 @@
             android:nextFocusUp="@id/actor"
             android:nextFocusDown="@id/flag"
             android:singleLine="true"
-            android:text="@string/play_change"
+            android:text="@string/home_subscription_switch"
             android:textColor="@color/white"
             android:textSize="15sp"
             app:drawableStartCompat="@drawable/ic_detail_change" />

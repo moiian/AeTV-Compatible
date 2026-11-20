@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.presenter;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,6 +11,8 @@ import androidx.leanback.widget.Presenter;
 import com.bumptech.glide.Glide;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.databinding.AdapterVodBinding;
 import com.fongmi.android.tv.utils.HistoryProgressFormatter;
@@ -79,9 +82,11 @@ public class HistoryPresenter extends Presenter {
         ViewHolder holder = (ViewHolder) viewHolder;
         setClickListener(holder.view, item);
         holder.binding.name.setText(item.getVodName());
-        holder.binding.site.setText(item.getSiteName());
+        Config origin = item.getCid() == VodConfig.getCid() ? null : Config.find(item.getCid());
+        String site = item.getCid() == VodConfig.getCid() ? item.getSiteName() : origin == null ? "" : origin.getName();
+        holder.binding.site.setText(site);
         holder.binding.remark.setText(item.getVodRemarks());
-        holder.binding.site.setVisibility(item.getSiteVisible());
+        holder.binding.site.setVisibility(TextUtils.isEmpty(site) ? View.GONE : View.VISIBLE);
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
         holder.binding.remark.setVisibility(delete || same ? View.GONE : View.VISIBLE);
         String watchedTime = HistoryProgressFormatter.format(item.getPosition(), item.getDuration());

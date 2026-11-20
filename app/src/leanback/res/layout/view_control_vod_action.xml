@@ -50,7 +50,7 @@
             android:id="@+id/change2"
             style="@style/Control"
             android:layout_marginEnd="8dp"
-            android:text="@string/play_change" />
+            android:text="@string/home_subscription_switch" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/fullscreen"

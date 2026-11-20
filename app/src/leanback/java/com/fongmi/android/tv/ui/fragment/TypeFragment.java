@@ -57,6 +57,8 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private List<Filter> mFilters;
     private boolean headerVisible;
     private boolean filterVisible;
+    private boolean loadingSiteHome;
+    private boolean siteHomeUsesCategory;
 
     public static TypeFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
         Bundle args = new Bundle();
@@ -161,7 +163,13 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         mLast = null;
         checkFilter();
         mScroller.reset();
-        getVideo(getTypeId(), "1");
+        if (requireArguments().getBoolean("siteHome")) {
+            loadingSiteHome = true;
+            siteHomeUsesCategory = false;
+            mViewModel.homeContent(getSite());
+        } else {
+            getVideo(getTypeId(), "1");
+        }
     }
 
     private void getVideo(String typeId, String page) {
@@ -169,6 +177,14 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     private void setAdapter(Result result) {
+        if (loadingSiteHome) {
+            loadingSiteHome = false;
+            if (result.getList().isEmpty()) {
+                siteHomeUsesCategory = true;
+                getVideo(getTypeId(), "1");
+                return;
+            }
+        }
         boolean first = mScroller.first();
         boolean flag = mExtends.isEmpty();
         int size = result.getList().size();
@@ -273,6 +289,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     @Override
     public boolean onLoadMore(String page) {
+        if (requireArguments().getBoolean("siteHome") && (!siteHomeUsesCategory || mAdapter.size() == 0)) return false;
         getVideo(getTypeId(), page);
         return true;
     }

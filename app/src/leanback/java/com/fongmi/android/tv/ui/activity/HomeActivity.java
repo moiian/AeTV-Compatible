@@ -114,6 +114,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private FamilyNavigation mNavigation;
     private String mPendingCategory;
+    private Class mUnlabeledCategory;
     private KeepFragment mLibrary;
     private SearchFragment mSearch;
     private SettingFragment mSettings;
@@ -471,6 +472,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         hideWebOverlay();
         applyTvChrome(TV_NORMAL);
         if (mLibrary == null && mSettings == null && mSearch == null) showHot();
+        mUnlabeledCategory = null;
         mNavigation.setTypes(List.of(), this::showCategory);
         mBinding.recycler.setVisibility(View.VISIBLE);
         mViewModel.homeContent();
@@ -502,6 +504,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             case HOME:
                 showHot();
                 showChart(Section.SERIES.firstChart(), true);
+                break;
+            case VOD:
+                showVod();
                 break;
             case LIBRARY:
                 showLibrary(mNavigation.library());
@@ -538,6 +543,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setTypes(Result result) {
+        mUnlabeledCategory = result.getTypes().stream()
+                .filter(type -> !FamilyNavigation.isCategoryLabel(type) && !type.getTypeId().isEmpty())
+                .findFirst().orElse(null);
         mNavigation.setTypes(result.getTypes(), this::showCategory);
         if (mCategory != null) {
             View item = mNavigation.category(mCategory.getType().getTypeId());
@@ -548,6 +556,23 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             openCategory(pending);
             mPendingCategory = null;
         }
+    }
+
+    private void showVod() {
+        if (getSupportFragmentManager().isStateSaved()) return;
+        View nav = mNavigation.vod();
+        if (mCategory != null && mNavigation.selected() == nav) return;
+        if (getHome().isEmpty()) {
+            openSetting();
+            return;
+        }
+        if (mUnlabeledCategory != null && !mUnlabeledCategory.isHome()) {
+            showCategory(mUnlabeledCategory, nav);
+            return;
+        }
+        clearPaneReferences();
+        mCategory = FolderFragment.newSiteHome(getHome().getKey(), mUnlabeledCategory);
+        showPane(mCategory, nav);
     }
 
     private void showCategory(Class type, View nav) {

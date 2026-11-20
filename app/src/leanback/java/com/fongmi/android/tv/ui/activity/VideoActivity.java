@@ -72,6 +72,7 @@ import com.fongmi.android.tv.bean.CastVideo;
 import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
+import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.bean.Parse;
@@ -83,6 +84,7 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ConfigEvent;
+import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.CustomTarget;
 import com.fongmi.android.tv.model.SiteViewModel;
@@ -132,6 +134,7 @@ import com.fongmi.android.tv.ui.dialog.ContentDialog;
 import com.fongmi.android.tv.ui.dialog.ControlDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
 import com.fongmi.android.tv.ui.dialog.EpisodeListDialog;
+import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.PanNetworkDiagnosticDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerKernelDialog;
 import com.fongmi.android.tv.ui.dialog.QuickSearchDialog;
@@ -144,6 +147,7 @@ import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.Task;
@@ -291,6 +295,11 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private String playHealthKey;
     private long detailStartTime;
     private long playerStartTime;
+    private int mPlaybackConfigId;
+    private Site mPlaybackSite;
+    private boolean mSubscriptionLoading;
+    private boolean mSubscriptionSearch;
+    private boolean mReloadingFromSubscription;
     private long mInitialPlaybackPosition = C.TIME_UNSET;
     private boolean pendingLutImport;
     private boolean playerKernelSwitchRefreshing;
@@ -458,11 +467,16 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private String getHistoryKey() {
-        return getKey().concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + VodConfig.getCid();
+        return getKey().concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + mPlaybackConfigId;
+    }
+
+    private boolean hasPlaybackSubscription() {
+        return !mSubscriptionLoading && mPlaybackConfigId == VodConfig.getCid();
     }
 
     private Site getSite() {
-        return VodConfig.get().getSite(getKey());
+        if (hasPlaybackSubscription()) return VodConfig.get().getSite(getKey());
+        return mPlaybackSite == null ? new Site() : mPlaybackSite;
     }
 
     private Flag getFlag() {
@@ -572,11 +586,16 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (TextUtils.isEmpty(id) || id.equals(oldId)) return;
         saveHistory();
         getIntent().putExtras(intent);
+        mPlaybackConfigId = VodConfig.getCid();
+        mPlaybackSite = null;
+        detailRequested = false;
         checkId();
     }
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        mPlaybackConfigId = savedInstanceState == null ? VodConfig.getCid()
+                : savedInstanceState.getInt("playbackConfigId", VodConfig.getCid());
         long start = System.currentTimeMillis();
         SpiderDebug.log("video-flow", "initView start sinceLaunch=%dms key=%s id=%s", getLaunchCost(start), getKey(), getId());
         if (!isCast() && hasInitialPreview()) showInitialPreview();
@@ -1065,9 +1084,19 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         else mBinding.progressLayout.showProgress();
     }
 
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        outState.putInt("playbackConfigId", mPlaybackConfigId);
+        super.onSaveInstanceState(outState);
+    }
+
     private void checkId() {
         if (detailRequested) return;
         detailRequested = true;
+        if (!hasPlaybackSubscription()) {
+            onSearch();
+            return;
+        }
         if (getId().startsWith("push://")) getIntent().putExtra("key", SiteApi.PUSH).putExtra("id", getId().substring(7));
         if (getId().isEmpty() || getId().startsWith("msearch:")) setEmpty(false);
         else getDetail();
@@ -1084,6 +1113,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         revealManualSearch = false;
         if (!isAutoMode()) mViewModel.stopSearch();
         saveHistory();
+        if (mSubscriptionSearch && mPlaybackConfigId != VodConfig.getCid()) {
+            getIntent().putExtra("mark", mHistory == null ? "" : mHistory.getVodRemarks());
+            getIntent().removeExtra("wallPic");
+            getIntent().removeExtra("content");
+        }
+        mPlaybackConfigId = VodConfig.getCid();
+        mPlaybackSite = null;
+        getIntent().putExtra("name", item.getName());
         getIntent().putExtra("key", item.getSiteKey());
         getIntent().putExtra("pic", item.getPic());
         getIntent().putExtra("id", item.getId());
@@ -1099,6 +1136,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void setDetail(Result result) {
+        if (result == null || !hasPlaybackSubscription()) return;
         long cost = System.currentTimeMillis() - detailStartTime;
         SpiderDebug.log("video-flow", "detail finish cost=%dms empty=%s msg=%s", cost, result.getList().isEmpty(), result.getMsg());
         recordDetailHealth(result, cost);
@@ -1107,8 +1145,24 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
             SpiderDebug.log("video-flow", "detail pending service key=%s id=%s", getKey(), getId());
             return;
         }
-        if (result.getList().isEmpty()) setEmpty(result.hasMsg());
-        else setDetail(result.getVod());
+        boolean subscriptionReload = mReloadingFromSubscription;
+        mReloadingFromSubscription = false;
+        if (!result.getList().isEmpty()) {
+            mSubscriptionSearch = false;
+            setDetail(result.getVod());
+        } else if (subscriptionReload) {
+            mFlagAdapter.clear();
+            mBinding.flag.setVisibility(View.GONE);
+            mEpisodeAdapter.addAll(List.of());
+            mBinding.episode.setVisibility(View.GONE);
+            mBinding.array.setVisibility(View.GONE);
+            setQualityVisible(false);
+            updateFocus();
+            showError(getString(R.string.home_subscription_no_detail));
+            initSearch(mBinding.name.getText().toString(), false);
+        } else {
+            setEmpty(result.hasMsg());
+        }
         Notify.show(result.getMsg());
     }
 
@@ -1120,7 +1174,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         } else {
             mBinding.name.setText(getName());
             App.post(mR4, 10000);
-            checkSearch(false);
+            checkSearch();
         }
     }
 
@@ -1134,6 +1188,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         item.checkContent(getContent());
         mBinding.progressLayout.showContent();
         mBinding.name.setText(item.getName());
+        getIntent().putExtra("name", item.getName());
         mFlagAdapter.addAll(item.getFlags());
         mBinding.video.requestFocus();
         App.removeCallbacks(mR4);
@@ -1176,6 +1231,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void getPlayer(Flag flag, Episode episode) {
+        if (mReloadingFromSubscription || !hasPlaybackSubscription()) return;
         mBinding.widget.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
         playerStartTime = System.currentTimeMillis();
         beginPlayHealth();
@@ -1204,7 +1260,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void setPlayer(Result result) {
-        if (isFinishing() || isDestroyed()) return;
+        if (result == null || mReloadingFromSubscription || isFinishing() || isDestroyed() || !hasPlaybackSubscription()) return;
         SpiderDebug.log("video-flow", "player finish cost=%dms useParse=%s multi=%s msg=%s", System.currentTimeMillis() - playerStartTime, result.shouldUseParse(), result.getUrl().isMulti(), result.getMsg());
         if (service() == null) {
             mPendingPlayer = result;
@@ -1254,7 +1310,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     public void onItemClick(Flag item) {
-        if (isFinishing() || isDestroyed() || mFlagAdapter.getItemCount() == 0 || item.isSelected()) return;
+        if (mReloadingFromSubscription || !hasPlaybackSubscription() || isFinishing() || isDestroyed() || mFlagAdapter.getItemCount() == 0 || item.isSelected()) return;
         int oldPosition = mFlagAdapter.getSelectedPosition();
         mFlagAdapter.setSelected(item);
         int newPosition = mFlagAdapter.getSelectedPosition();
@@ -1310,7 +1366,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     public void onItemClick(Episode item) {
-        if (shouldEnterFullscreen(item)) return;
+        if (mReloadingFromSubscription || !hasPlaybackSubscription() || shouldEnterFullscreen(item)) return;
         selectEpisode(item, true);
     }
 
@@ -1551,9 +1607,11 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onSearch() {
-        if (onLyricsSearch()) return;
-        String keyword = mBinding.name.getText().toString();
-        if (TextUtils.isEmpty(keyword)) return;
+        if (mSubscriptionLoading || onLyricsSearch()) return;
+        String keyword = Objects.toString(mBinding.name.getText(), getName()).trim();
+        if (keyword.isEmpty()) keyword = getName();
+        if (keyword.isEmpty()) return;
+        mSubscriptionSearch = !hasPlaybackSubscription();
         initSearch(keyword, false);
     }
 
@@ -1773,7 +1831,9 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onKeep() {
-        Keep keep = Keep.find(getHistoryKey());
+        if (mHistory == null || mSubscriptionLoading || mReloadingFromSubscription) return;
+        if (!mHistory.getKey().equals(getHistoryKey())) return;
+        Keep keep = Keep.find(mPlaybackConfigId, getHistoryKey());
         Notify.show(keep != null ? R.string.keep_del : R.string.keep_add);
         if (keep != null) keep.delete();
         else createKeep();
@@ -2468,7 +2528,74 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onChange() {
-        checkSearch(true);
+        if (mSubscriptionLoading || mReloadingFromSubscription) return;
+        hideControl();
+        HistoryDialog.create().vod().readOnly().show(this, config -> {
+            if (config == null || config.isEmpty() || config.getUrl().equals(VodConfig.getUrl())) return;
+            if (config.getUrl().startsWith("file")) {
+                PermissionUtil.requestFile(this, granted -> {
+                    if (granted) switchSubscription(config);
+                });
+            } else {
+                switchSubscription(config);
+            }
+        });
+    }
+
+    private void switchSubscription(Config config) {
+        if (mSubscriptionLoading || isFinishing() || isDestroyed()) return;
+        String title = Objects.toString(mBinding.name.getText(), getName()).trim();
+        if (title.isEmpty()) title = getName();
+        if (title.isEmpty()) return;
+        final String keyword = title;
+        Config previous = VodConfig.get().getConfig();
+        saveHistory();
+        mPlaybackSite = getSite();
+        mSubscriptionLoading = true;
+        mViewModel.stopSearch();
+        mPendingDetail = null;
+        mPendingPlayer = null;
+        App.removeCallbacks(mR4);
+        dismissQuickSearchDialog();
+        Notify.progress(this);
+        VodConfig.load(config, new Callback() {
+            @Override
+            public void success() {
+                if (VodConfig.get().getSites().isEmpty()) {
+                    error(getString(R.string.home_subscription_no_sites));
+                    return;
+                }
+                mSubscriptionLoading = false;
+                Notify.dismiss();
+                if (isFinishing() || isDestroyed()) return;
+                if (isFullscreen()) exitFullscreen();
+                mBroken.clear();
+                mSubscriptionSearch = true;
+                initSearch(keyword, false);
+            }
+
+            @Override
+            public void error(String message) {
+                VodConfig.load(previous, new Callback() {
+                    @Override
+                    public void success() {
+                        finishSwitch();
+                    }
+
+                    @Override
+                    public void error(String restoreError) {
+                        finishSwitch();
+                        Notify.show(restoreError);
+                    }
+
+                    private void finishSwitch() {
+                        mSubscriptionLoading = false;
+                        Notify.dismiss();
+                        Notify.show(message);
+                    }
+                });
+            }
+        });
     }
 
     private void onFullscreen() {
@@ -3270,6 +3397,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onRefresh() {
+        if (mReloadingFromSubscription || !hasPlaybackSubscription()) return;
         saveHistory();
         player().stop();
         player().clear();
@@ -3586,7 +3714,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void checkHistory(Vod item) {
-        mHistory = History.find(getHistoryKey());
+        mHistory = History.find(mPlaybackConfigId, getHistoryKey());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
@@ -3639,7 +3767,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private History createHistory(Vod item) {
         History history = new History();
         history.setKey(getHistoryKey());
-        history.setCid(VodConfig.getCid());
+        history.setCid(mPlaybackConfigId);
         history.setVodName(item.getName());
         history.setVodPic(getInitialArtwork(item));
         history.setWallPic(getWallPic());
@@ -3689,7 +3817,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void checkKeepImg() {
-        boolean kept = Keep.find(getHistoryKey()) != null;
+        boolean kept = Keep.find(mPlaybackConfigId, getHistoryKey()) != null;
         mBinding.keep.setCompoundDrawablesWithIntrinsicBounds(kept ? R.drawable.ic_detail_keep_on : R.drawable.ic_detail_keep_off, 0, 0, 0);
         mBinding.audioKeepAction.setSelected(kept);
         mBinding.audioKeepAction.setCompoundDrawablesWithIntrinsicBounds(0, kept ? R.drawable.ic_detail_keep_on : R.drawable.ic_detail_keep_off, 0, 0);
@@ -3698,7 +3826,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private void createKeep() {
         Keep keep = new Keep();
         keep.setKey(getHistoryKey());
-        keep.setCid(VodConfig.getCid());
+        keep.setCid(mPlaybackConfigId);
         keep.setVodPic(mHistory.getVodPic());
         keep.setVodName(mHistory.getVodName());
         keep.setSiteName(getSite().getName());
@@ -3707,7 +3835,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void updateKeep() {
-        Keep keep = Keep.find(getHistoryKey());
+        Keep keep = Keep.find(mPlaybackConfigId, getHistoryKey());
         if (keep != null) {
             keep.setVodName(mHistory.getVodName());
             keep.setVodPic(mHistory.getVodPic());
@@ -5577,7 +5705,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void startFlow() {
-        if (!PlayerSetting.isAutoChange()) return;
+        if (!hasPlaybackSubscription() || !PlayerSetting.isAutoChange()) return;
         if (!getSite().isChangeable()) return;
         if (isUseParse()) checkParse();
         else checkFlag();
@@ -5599,14 +5727,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private void checkFlag() {
         int position = isGone(mBinding.flag) ? -1 : mFlagAdapter.getPosition();
-        if (position == mFlagAdapter.getItemCount() - 1) checkSearch(false);
+        if (position == mFlagAdapter.getItemCount() - 1) checkSearch();
         else nextFlag(position);
     }
 
-    private void checkSearch(boolean force) {
-        if (!force && !PlayerSetting.isAutoChange()) return;
+    private void checkSearch() {
+        if (!hasPlaybackSubscription() || !PlayerSetting.isAutoChange() || mSubscriptionSearch) return;
         if (mQuickAdapter.getItemCount() == 0) initSearch(mBinding.name.getText().toString(), true);
-        else if (isAutoMode() || force) nextSite();
+        else if (isAutoMode()) nextSite();
     }
 
     private void initSearch(String keyword, boolean auto) {
@@ -5635,12 +5763,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         List<Site> sites = new ArrayList<>();
         for (Site site : VodConfig.get().getSites()) if (isPass(site)) sites.add(site);
         SiteHealthStore.sortSites(sites);
-        mViewModel.searchContent(sites, keyword, true);
+        mViewModel.searchContent(sites, keyword, !mSubscriptionSearch);
     }
 
     private void setSearch(Result result) {
-        List<Vod> items = result.getList();
-        items.removeIf(this::mismatch);
+        if (result == null || mSubscriptionLoading) return;
+        List<Vod> items = new ArrayList<>(result.getList());
+        if (mSubscriptionSearch) items.removeIf(Vod::isFolder);
+        else items.removeIf(this::mismatch);
         mQuickAdapter.addAll(items);
         mBinding.quick.setVisibility(View.GONE);
         updateFocus();
@@ -5653,7 +5783,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void setSearchProgress(SearchProgress progress) {
-        if (progress == null || isInitAuto()) return;
+        if (progress == null || isInitAuto() || mSubscriptionLoading) return;
         showQuickSearchDialog(new ArrayList<>());
         if (mQuickSearchDialog != null) mQuickSearchDialog.setProgress(progress.current(), progress.total(), progress.finished());
     }
@@ -5682,7 +5812,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     public void onItemClick(Vod item) {
+        if (mSubscriptionLoading) return;
+        mReloadingFromSubscription = mSubscriptionSearch;
         setAutoMode(false);
+        dismissQuickSearchDialog();
         applySearchArtwork(item);
         getDetail(item);
     }

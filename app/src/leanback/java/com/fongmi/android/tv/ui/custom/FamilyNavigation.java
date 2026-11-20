@@ -21,7 +21,7 @@ public class FamilyNavigation {
 
     private static final int DEFAULT_CATEGORY_COUNT = 5;
 
-    public enum Destination { HOME, LIBRARY, CATEGORY, SEARCH, SCOPED_SEARCH, LIVE, SETTINGS }
+    public enum Destination { HOME, LIBRARY, VOD, CATEGORY, SEARCH, SCOPED_SEARCH, LIVE, SETTINGS }
 
     private final FamilyNavigationBinding binding;
     private final Context context;
@@ -45,6 +45,10 @@ public class FamilyNavigation {
         library = addNav(menu, context.getString(R.string.home_keep), R.drawable.ic_home_keep, view -> action.accept(Destination.LIBRARY, view));
         addNavDivider(menu);
         vod = addNav(menu, context.getString(R.string.home_vod), R.drawable.ic_home_vod, view -> {
+            if (categoryItems.isEmpty()) {
+                action.accept(Destination.VOD, view);
+                return;
+            }
             showAll = false;
             updateCategoryNavigation();
         });
@@ -83,6 +87,10 @@ public class FamilyNavigation {
         return settings;
     }
 
+    public View vod() {
+        return vod;
+    }
+
     public View category(String id) {
         return categoryItems.get(id);
     }
@@ -111,11 +119,16 @@ public class FamilyNavigation {
         categoryItems.clear();
         if (types.isEmpty()) showAll = false;
         for (Class type : types) {
+            if (!isCategoryLabel(type)) continue;
             TextView item = addNav(categories, type.getTypeName(), 0, view -> onClick.accept(type, view));
             indentCategory(item);
             categoryItems.put(type.getTypeId(), item);
         }
         updateCategoryNavigation();
+    }
+
+    public static boolean isCategoryLabel(Class type) {
+        return !type.getTypeName().trim().isEmpty() && !type.isHome();
     }
 
     private TextView addNav(LinearLayout menu, CharSequence label, int icon, View.OnClickListener click) {
@@ -149,13 +162,14 @@ public class FamilyNavigation {
         View line = new View(context);
         line.setBackgroundColor(context.getColor(R.color.aetv_divider));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ResUtil.dp2px(1));
-        params.setMargins(ResUtil.dp2px(12), ResUtil.dp2px(7), ResUtil.dp2px(12), ResUtil.dp2px(7));
+        params.setMargins(ResUtil.dp2px(12), ResUtil.dp2px(6), ResUtil.dp2px(12), ResUtil.dp2px(6));
         menu.addView(line, params);
     }
 
     private void updateCategoryNavigation() {
         LinearLayout categories = binding.categoryNavigation;
         int count = categories.getChildCount();
+        setNavIcons(vod, R.drawable.ic_home_vod, count > DEFAULT_CATEGORY_COUNT ? R.drawable.ic_aetv_chevron_right : 0);
         for (int i = 0; i < count; i++) {
             categories.getChildAt(i).setVisibility(showAll || i < DEFAULT_CATEGORY_COUNT ? View.VISIBLE : View.GONE);
         }

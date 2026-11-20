@@ -34,6 +34,12 @@ public class FolderFragment extends BaseFragment {
         return fragment;
     }
 
+    public static FolderFragment newSiteHome(String key, Class type) {
+        FolderFragment fragment = newInstance(key, type == null ? new Class() : type);
+        fragment.requireArguments().putBoolean("siteHome", true);
+        return fragment;
+    }
+
     private String getKey() {
         return getArguments().getString("key");
     }
@@ -54,7 +60,10 @@ public class FolderFragment extends BaseFragment {
     @Override
     protected void initView() {
         mType = getType();
-        if (getChild() == null) getChildFragmentManager().beginTransaction().replace(R.id.container, TypeFragment.newInstance(getKey(), mType.getTypeId(), mType.getStyle(), getExtend(), mType.isFolder())).commit();
+        if (getChild() != null) return;
+        TypeFragment child = TypeFragment.newInstance(getKey(), mType.getTypeId(), mType.getStyle(), getExtend(), mType.isFolder());
+        child.requireArguments().putBoolean("siteHome", requireArguments().getBoolean("siteHome"));
+        getChildFragmentManager().beginTransaction().replace(R.id.container, child).commit();
     }
 
     private HashMap<String, String> getExtend() {
