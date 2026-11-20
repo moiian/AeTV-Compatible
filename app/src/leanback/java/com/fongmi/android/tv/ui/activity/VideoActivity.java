@@ -282,7 +282,6 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
-    private Runnable mR4;
     private Runnable mAudioRefreshLyricsRunnable;
     private Runnable mApplyAudioBackgroundRunnable;
     private Runnable mHideAudioFocusRunnable;
@@ -517,10 +516,6 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         return Setting.getReset() == 1;
     }
 
-    private boolean isFromCollect() {
-        return getIntent().getBooleanExtra("collect", false);
-    }
-
     private long getLaunchTime() {
         return getIntent().getLongExtra("launchTime", 0);
     }
@@ -615,7 +610,6 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mR1 = this::hideControl;
         mR2 = this::updateFocus;
         mR3 = this::setTraffic;
-        mR4 = this::showEmpty;
         mAudioRefreshLyricsRunnable = this::refreshLyricsNow;
         mApplyAudioBackgroundRunnable = this::applyAudioBackground;
         mHideAudioFocusRunnable = this::hideAudioStageFocusHighlight;
@@ -1098,7 +1092,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
             return;
         }
         if (getId().startsWith("push://")) getIntent().putExtra("key", SiteApi.PUSH).putExtra("id", getId().substring(7));
-        if (getId().isEmpty() || getId().startsWith("msearch:")) setEmpty(false);
+        if (getId().isEmpty() || getId().startsWith("msearch:")) onDetailUnavailable("");
         else getDetail();
     }
 
@@ -1112,6 +1106,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private void getDetail(Vod item) {
         revealManualSearch = false;
         if (!isAutoMode()) mViewModel.stopSearch();
+        mViewModel.cancelPlayerRequest();
+        mPendingPlayer = null;
         saveHistory();
         if (mSubscriptionSearch && mPlaybackConfigId != VodConfig.getCid()) {
             getIntent().putExtra("mark", mHistory == null ? "" : mHistory.getVodRemarks());
@@ -1147,35 +1143,45 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         }
         boolean subscriptionReload = mReloadingFromSubscription;
         mReloadingFromSubscription = false;
-        if (!result.getList().isEmpty()) {
+        Vod vod = result.getVod();
+        List<Flag> playable = vod.getFlags().stream()
+                .filter(flag -> flag != null && flag.getEpisodes().stream()
+                        .anyMatch(episode -> episode != null && !episode.getUrl().isEmpty()))
+                .toList();
+        if (!result.getList().isEmpty() && !playable.isEmpty()) {
+            vod.setFlags(new ArrayList<>(playable));
             mSubscriptionSearch = false;
-            setDetail(result.getVod());
+            setDetail(vod);
         } else if (subscriptionReload) {
-            mFlagAdapter.clear();
-            mBinding.flag.setVisibility(View.GONE);
-            mEpisodeAdapter.addAll(List.of());
-            mBinding.episode.setVisibility(View.GONE);
-            mBinding.array.setVisibility(View.GONE);
-            setQualityVisible(false);
-            updateFocus();
+            clearDetailLines();
             showError(getString(R.string.home_subscription_no_detail));
             initSearch(mBinding.name.getText().toString(), false);
         } else {
-            setEmpty(result.hasMsg());
+            onDetailUnavailable(result.getMsg());
+            return;
         }
         Notify.show(result.getMsg());
     }
 
-    private void setEmpty(boolean finish) {
-        if (isFromCollect() || finish) {
-            finish();
-        } else if (getName().isEmpty()) {
+    private void onDetailUnavailable(String message) {
+        if (getName().isEmpty()) {
             showEmpty();
         } else {
+            clearDetailLines();
+            mBinding.progressLayout.showContent();
             mBinding.name.setText(getName());
-            App.post(mR4, 10000);
+            showError(message.isEmpty() ? getString(R.string.error_play_flag) : message);
             checkSearch();
         }
+    }
+
+    private void clearDetailLines() {
+        mFlagAdapter.clear();
+        mBinding.flag.setVisibility(View.GONE);
+        mEpisodeAdapter.addAll(List.of());
+        mBinding.episode.setVisibility(View.GONE);
+        mBinding.array.setVisibility(View.GONE);
+        setQualityVisible(false);
     }
 
     private void showEmpty() {
@@ -1191,7 +1197,6 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         getIntent().putExtra("name", item.getName());
         mFlagAdapter.addAll(item.getFlags());
         mBinding.video.requestFocus();
-        App.removeCallbacks(mR4);
         checkHistory(item);
         checkFlag(item);
         checkKeepImg();
@@ -1265,6 +1270,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (service() == null) {
             mPendingPlayer = result;
             SpiderDebug.log("video-flow", "player pending service key=%s id=%s", getKey(), getId());
+            return;
+        }
+        if (result.hasMsg() || result.getRealUrl().isEmpty()) {
+            onError(result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
             return;
         }
         mQualityAdapter.addAll(result);
@@ -2555,7 +2564,6 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mViewModel.stopSearch();
         mPendingDetail = null;
         mPendingPlayer = null;
-        App.removeCallbacks(mR4);
         dismissQuickSearchDialog();
         Notify.progress(this);
         VodConfig.load(config, new Callback() {
@@ -5733,8 +5741,12 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private void checkSearch() {
         if (!hasPlaybackSubscription() || !PlayerSetting.isAutoChange() || mSubscriptionSearch) return;
-        if (mQuickAdapter.getItemCount() == 0) initSearch(mBinding.name.getText().toString(), true);
-        else if (isAutoMode()) nextSite();
+        if (isAutoMode()) {
+            setInitAuto(true);
+            nextSite();
+        } else {
+            initSearch(mBinding.name.getText().toString(), true);
+        }
     }
 
     private void initSearch(String keyword, boolean auto) {
@@ -5769,21 +5781,19 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private void setSearch(Result result) {
         if (result == null || mSubscriptionLoading) return;
         List<Vod> items = new ArrayList<>(result.getList());
-        if (mSubscriptionSearch) items.removeIf(Vod::isFolder);
+        if (mSubscriptionSearch) items.removeIf(item -> item == null || item.isFolder() || item.isAction() || item.getId().isEmpty());
         else items.removeIf(this::mismatch);
         mQuickAdapter.addAll(items);
         mBinding.quick.setVisibility(View.GONE);
         updateFocus();
-        if (!isInitAuto() && !items.isEmpty()) {
+        if (!isAutoMode() && !items.isEmpty()) {
             showQuickSearchDialog(items);
         }
         if (isInitAuto() && PlayerSetting.isAutoChange()) nextSite();
-        if (items.isEmpty()) return;
-        App.removeCallbacks(mR4);
     }
 
     private void setSearchProgress(SearchProgress progress) {
-        if (progress == null || isInitAuto() || mSubscriptionLoading) return;
+        if (progress == null || isAutoMode() || mSubscriptionLoading) return;
         showQuickSearchDialog(new ArrayList<>());
         if (mQuickSearchDialog != null) mQuickSearchDialog.setProgress(progress.current(), progress.total(), progress.finished());
     }
@@ -5821,11 +5831,16 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private boolean mismatch(Vod item) {
-        if (getId().equals(item.getId())) return true;
-        if (mBroken.contains(item.getId())) return true;
+        if (item == null || item.isFolder() || item.isAction() || item.getId().isEmpty()) return true;
+        String identity = siteItemKey(item.getSiteKey(), item.getId());
+        if (identity.equals(siteItemKey(getKey(), getId())) || mBroken.contains(identity)) return true;
         String keyword = Objects.toString(mBinding.part.getTag(), "");
         if (isAutoMode()) return !item.getName().equals(keyword);
         else return !item.getName().contains(keyword);
+    }
+
+    private String siteItemKey(String site, String id) {
+        return site + AppDatabase.SYMBOL + id;
     }
 
     private void nextParse(int position) {
@@ -5841,15 +5856,18 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void nextSite() {
-        if (mQuickAdapter.getItemCount() == 0) return;
-        int position = mQuickAdapter.getBestPosition();
-        Vod item = mQuickAdapter.get(position);
-        Notify.show(getString(R.string.play_switch_site, item.getSiteName()));
-        mQuickAdapter.remove(position);
-        mBroken.add(getId());
-        setInitAuto(false);
-        applySearchArtwork(item);
-        getDetail(item);
+        mBroken.add(siteItemKey(getKey(), getId()));
+        while (mQuickAdapter.getItemCount() > 0) {
+            int position = mQuickAdapter.getBestPosition();
+            Vod item = mQuickAdapter.get(position);
+            mQuickAdapter.remove(position);
+            if (mismatch(item)) continue;
+            setInitAuto(false);
+            Notify.show(getString(R.string.play_switch_site, item.getSiteName()));
+            applySearchArtwork(item);
+            getDetail(item);
+            return;
+        }
     }
 
     private void onPaused() {
@@ -6449,7 +6467,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         DanmakuApi.cancel();
         dismissQuickSearchDialog();
         RefreshEvent.keep();
-        App.removeCallbacks(mR1, mR2, mR3, mR4, mAudioRefreshLyricsRunnable, mApplyAudioBackgroundRunnable, mHideAudioFocusRunnable);
+        App.removeCallbacks(mR1, mR2, mR3, mAudioRefreshLyricsRunnable, mApplyAudioBackgroundRunnable, mHideAudioFocusRunnable);
         stopAudioCoverRotation();
         if (mOsd != null) mOsd.release();
         mViewModel.getResult().removeObserver(mObserveDetail);

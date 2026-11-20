@@ -46,11 +46,13 @@ public class Url {
     }
 
     public String v(int position) {
-        return position >= getValues().size() ? "" : getValues().get(position).getV();
+        return position < 0 || position >= getValues().size() || getValues().get(position) == null
+                ? "" : getValues().get(position).getV();
     }
 
     public String n(int position) {
-        return position >= getValues().size() ? "" : getValues().get(position).getN();
+        return position < 0 || position >= getValues().size() || getValues().get(position) == null
+                ? "" : getValues().get(position).getN();
     }
 
     public Url add(String v) {
@@ -70,7 +72,7 @@ public class Url {
     }
 
     public Url set(int position) {
-        this.position = Math.min(position, getValues().size() - 1);
+        this.position = Math.max(0, Math.min(position, getValues().size() - 1));
         return this;
     }
 

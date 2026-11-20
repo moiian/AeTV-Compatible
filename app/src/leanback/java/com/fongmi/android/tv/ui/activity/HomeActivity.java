@@ -311,8 +311,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.getResult().observe(this, result -> {
+            if (result == null) return;
             Cache.clear().put(result, getHome().getKey());
             setTypes(result);
+            if (result.hasMsg()) Notify.show(result.getMsg());
+            else if (!getHome().isEmpty() && result.getTypes().isEmpty() && result.getList().isEmpty())
+                Notify.show(R.string.aetv_site_unavailable);
         });
         mHotTvModel = new ViewModelProvider(this).get(HotTvViewModel.class);
         for (Section section : Section.values()) {

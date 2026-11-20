@@ -1544,4 +1544,5 @@
 
     <string name="player_audio_badge_queue">Queue</string>
     <string name="player_audio_repeat">Repeat</string>
+    <string name="aetv_incompatible_csp">This plugin version is associated with unexpected exits on 32-bit TVs and was skipped. Select another subscription or site.</string>
 </resources>

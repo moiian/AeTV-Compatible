@@ -69,4 +69,5 @@
     <string name="home_subscription_switch">切换订阅</string>
     <string name="home_subscription_no_sites">这个订阅没有可用站点。</string>
     <string name="home_subscription_no_detail">这个结果暂时无法打开。</string>
+    <string name="aetv_site_unavailable">这个站点暂未返回内容，可以重试或切换站点。</string>
 </resources>

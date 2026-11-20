@@ -3,7 +3,10 @@ package com.fongmi.android.tv.api.loader;
 import android.content.Context;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.BuildConfig;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.Download;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
@@ -15,11 +18,14 @@ import com.github.catvod.utils.Util;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import dalvik.system.DexClassLoader;
@@ -33,6 +39,7 @@ public class JarLoader {
     private final ConcurrentHashMap<String, ProxyMethod> methods;
     private final ConcurrentHashMap<String, Spider> spiders;
     private final ConcurrentHashMap<String, Object> locks;
+    private final Set<String> incompatible = ConcurrentHashMap.newKeySet();
     private volatile String recent;
 
     public JarLoader() {
@@ -50,6 +57,7 @@ public class JarLoader {
         methods.clear();
         spiders.clear();
         locks.clear();
+        incompatible.clear();
         recent = null;
     }
 
@@ -67,6 +75,16 @@ public class JarLoader {
         if (!Path.exists(file)) {
             SpiderDebug.log("jar-loader", "load skip missing key=%s file=%s", key, file);
             return;
+        }
+        if ("leanback".equals(BuildConfig.FLAVOR_mode) && "armeabi_v7a".equals(BuildConfig.FLAVOR_abi)) {
+            try {
+                if (CspCompatibility.isAffectedOnArmTv(file)) {
+                    incompatible.add(key);
+                    throw incompatiblePlugin();
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
         }
         if (!file.setReadOnly()) {
             SpiderDebug.log("jar-loader", "load skip readonly failed key=%s file=%s size=%s", key, file.getAbsolutePath(), file.length());
@@ -163,6 +181,7 @@ public class JarLoader {
         if (jar.startsWith("assets")) jar = UrlUtil.convert(jar);
         Object lock = locks.computeIfAbsent(key, k -> new Object());
         synchronized (lock) {
+            if (incompatible.contains(key)) throw incompatiblePlugin();
             if (loaders.containsKey(key)) return;
             String[] texts = jar.split(";md5;");
             String md5 = texts.length > 1 ? texts[1].trim() : "";
@@ -177,6 +196,10 @@ public class JarLoader {
                 load(key, Path.local(jar));
             }
         }
+    }
+
+    private IllegalStateException incompatiblePlugin() {
+        return new IllegalStateException(ResUtil.getString(R.string.aetv_incompatible_csp));
     }
 
     public DexClassLoader dex(String jar) {

@@ -69,4 +69,5 @@
     <string name="home_subscription_switch">Switch subscription</string>
     <string name="home_subscription_no_sites">The subscription has no available sites.</string>
     <string name="home_subscription_no_detail">This result could not be opened.</string>
+    <string name="aetv_site_unavailable">This site returned no content. Select another site or try again.</string>
 </resources>

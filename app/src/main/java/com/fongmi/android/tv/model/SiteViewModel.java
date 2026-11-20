@@ -133,6 +133,12 @@ public class SiteViewModel extends ViewModel {
         execute(TaskType.RESULT, result, () -> SiteApi.detailContent(key, id));
     }
 
+    public void cancelPlayerRequest() {
+        taskIds.get(TaskType.PLAYER).incrementAndGet();
+        ListenableFuture<?> request = futures.remove(TaskType.PLAYER);
+        if (request != null) request.cancel(true);
+    }
+
     public void playerContent(String key, String flag, String id) {
         execute(TaskType.PLAYER, player, () -> SiteApi.playerContent(key, flag, id));
     }
@@ -203,17 +209,23 @@ public class SiteViewModel extends ViewModel {
                 result -> {
                     if (taskId.get() != currentId) return;
                     if (onSuccess != null) onSuccess.accept(result);
-                    liveData.postValue(result);
+                    publish(type, currentId, liveData, result);
                 },
                 error -> {
                     if (taskId.get() != currentId) return;
                     if (error instanceof CancellationException) return;
                     if (onError != null) onError.accept(error);
-                    if (error instanceof ExtractException) liveData.postValue(Result.error(error.getMessage()));
-                    else liveData.postValue(Result.empty());
+                    publish(type, currentId, liveData, error instanceof ExtractException
+                            ? Result.error(error.getMessage()) : Result.empty());
                     error.printStackTrace();
                 }
         ), MoreExecutors.directExecutor());
+    }
+
+    private void publish(TaskType type, int id, MutableLiveData<Result> data, Result value) {
+        App.post(() -> {
+            if (taskIds.get(type).get() == id) data.setValue(value);
+        });
     }
 
     public int stopSearch() {
